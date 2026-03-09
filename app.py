@@ -23,22 +23,15 @@ def get_gspread_client():
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1zLXD14kx_lA61qkCpTkKsHDEIMvgLRiN58RY-j8OPsk/edit?usp=sharing"
 
-# Fail-safe loading
-try:
-    client = get_gspread_client()
-    sh = client.open_by_url(SHEET_URL)
-    roster_sheet = sh.worksheet("Team_Roster")
-    questions_sheet = sh.worksheet("Master_Questions")
-    logs_sheet = sh.worksheet("Task_Logs")
-    activity_sheet = sh.worksheet("User_Activity")
-except Exception as e:
-    st.error(f"⚠️ Connection Error: {e}")
-    st.info("Check your Tab names and permissions!")
-    st.stop()
+# Load the sheets
+client = get_gspread_client()
+sh = client.open_by_url(SHEET_URL)
+roster_sheet = sh.worksheet("Team_Roster")
+questions_sheet = sh.worksheet("Master_Questions")
+logs_sheet = sh.worksheet("Task_Logs")
+activity_sheet = sh.worksheet("User_Activity")
 
 def get_clean_df(ws):
-    # Added a tiny sleep to prevent API spam
-    time.sleep(0.5)
     data = ws.get_all_values()
     if not data: return pd.DataFrame()
     df = pd.DataFrame(data[1:], columns=data[0])
@@ -48,16 +41,17 @@ def get_clean_df(ws):
 roster_df = get_clean_df(roster_sheet)
 questions_df = get_clean_df(questions_sheet)
 
-# --- 3. SIDEBAR: SHIFT CONTROL ---
+# --- 3. SIDEBAR: SHIFT CONTROL (IST) ---
 st.sidebar.title("🕒 Shift Control (IST)")
 
 email_list = sorted(roster_df['Worker_Email'].unique().tolist())
 user_email = st.sidebar.selectbox("Verify Email", email_list)
 
+# FORCE REFRESH: Fetch fresh activity state every time the user selects an email
 activity_df = get_clean_df(activity_sheet)
 user_state_row = activity_df[activity_df['Worker_Email'] == user_email]
 
-# Fixed the 'Current_Status' KeyError
+#
 if not user_state_row.empty and 'Current_Status' in user_state_row.columns:
     current_status = user_state_row.iloc[0]['Current_Status']
 else:
@@ -65,19 +59,25 @@ else:
 
 def update_state(email, action):
     now_ist = get_ist_time().strftime("%m/%d/%Y %H:%M:%S")
-    # Finding the row manually to avoid full sheet refreshes
-    cell = activity_sheet.find(email)
-    if cell:
-        activity_sheet.update_cell(cell.row, 2, action)
-        activity_sheet.update_cell(cell.row, 3, now_ist)
-    else:
-        activity_sheet.append_row([email, action, now_ist])
-    
-    # Log the shift change
-    logs_sheet.append_row([str(uuid.uuid4())[:8], "", 0, email, "", "", now_ist, now_ist[:10], "", action])
-    st.rerun()
+    # Finding the row manually in User_Activity
+    try:
+        cell = activity_sheet.find(email)
+        if cell:
+            activity_sheet.update_cell(cell.row, 2, action)
+            activity_sheet.update_cell(cell.row, 3, now_ist)
+        else:
+            activity_sheet.append_row([email, action, now_ist])
+        
+        # Log to Task_Logs
+        logs_sheet.append_row([str(uuid.uuid4())[:8], "", 0, email, "", "", now_ist, now_ist[:10], "", action])
+        
+        # Clear cache and rerun to unlock interface immediately
+        st.cache_resource.clear()
+        st.rerun()
+    except Exception as e:
+        st.error(f"Sync failed: {e}")
 
-# Independent Status Buttons
+# Independent Button Interface
 if current_status == "Logged Out":
     if st.sidebar.button("🟢 Login", use_container_width=True):
         update_state(user_email, "Login")
@@ -98,6 +98,7 @@ elif current_status == "Start Break":
 st.title("🎙️ Production Log")
 st.subheader(f"Current Status: {current_status}")
 
+# Logic to unlock the main area based on IST state
 if current_status in ["Login", "End Break"]:
     with st.container(border=True):
         q_list = sorted(questions_df['Question_ID'].astype(str).unique().tolist())
@@ -125,6 +126,7 @@ if current_status in ["Login", "End Break"]:
                 now_ist.strftime("%m/%d/%Y %H:%M:%S"), now_ist.strftime("%m/%d/%Y"),
                 proj_id, task_mode
             ])
-            st.success(f"Task Logged at {now_ist.strftime('%H:%M:%S')} IST!")
+            st.success("Task Recorded in IST!")
+            st.balloons()
 else:
     st.warning("⚠️ Access Locked. Please Login or End Break to resume work.")
