@@ -1,73 +1,92 @@
 import streamlit as st
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 from datetime import datetime
 import uuid
-import time
 
-st.set_page_config(page_title="Task Logger", layout="centered")
+# --- 1. CONNECT TO GOOGLE SHEETS ---
+def get_gspread_client():
+    # Grabs the secret key you pasted into Streamlit Secrets
+    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    return gspread.authorize(creds)
 
-st.title("🎧 Audio Task Logger")
+# PASTE YOUR FULL GOOGLE SHEET URL BETWEEN THE QUOTES BELOW
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1zLXD14kx_lA61qkCpTkKsHDEIMvgLRiN58RY-j8OPsk/edit?usp=sharing"
 
-# We would load your Google Sheets into Pandas DataFrames here behind the scenes.
-# For example: 
-# roster_df = load_google_sheet("Team_Roster")
-# questions_df = load_google_sheet("Master_Questions")
+client = get_gspread_client()
+sh = client.open_by_url(SHEET_URL)
 
-with st.form("task_form"):
-    # Worker identifies themselves
-    email = st.text_input("Worker Email (e.g., desicrew.sajith@gmail.com)")
+# Define our worksheets based on your tabs
+roster_sheet = sh.worksheet("Team_Roster")
+questions_sheet = sh.worksheet("Master_Questions")
+logs_sheet = sh.worksheet("Task_Logs")
+
+# --- 2. THE UI ---
+st.title("🎙️ Audio Transcription Tracker")
+
+with st.form("log_form", clear_on_submit=True):
+    email = st.text_input("Enter your Work Email").strip().lower()
+    action = st.selectbox("What are you doing?", ["Completed Task", "Login", "Start Break", "End Break", "Logout"])
+    q_id = st.text_input("Question ID (Only if completing a task)")
     
-    # What are they doing right now?
-    status = st.selectbox("Action", ["Completed Task", "Login", "Start Break", "End Break", "Logout"])
-    
-    # Only need the ID if they are actually logging a completed audio file
-    question_id = st.text_input("Question ID (Leave blank if just logging a break/shift)")
-    
-    submitted = st.form_submit_button("Submit Log")
+    submit = st.form_submit_button("Submit Entry")
 
-if submitted:
+if submit:
     if not email:
-        st.error("Whoops, need your email to log this!")
+        st.error("Email is required!")
     else:
-        with st.spinner("Processing..."):
-            # 1. Auto-generate the data
-            log_id = uuid.uuid4().hex[:8] # Creates a random ID like '49660a20'
-            current_time = datetime.now()
-            timestamp = current_time.strftime("%m/%d/%Y %H:%M:%S")
-            shift_date = current_time.strftime("%m/%d/%Y")
+        with st.spinner("Syncing with Google Sheets..."):
+            # Fetch data from your tabs to automate the log
+            roster_data = pd.DataFrame(roster_sheet.get_all_records())
+            questions_data = pd.DataFrame(questions_sheet.get_all_records())
             
-            # 2. Vibe Check: In the real app, we look up these values from your DataFrames
-            # worker_name = roster_df.loc[roster_df['Worker_Email'] == email, 'Worker_Name'].values[0]
-            # role = roster_df.loc[roster_df['Worker_Email'] == email, 'Role'].values[0]
-            # audio_duration = questions_df.loc[questions_df['Question_ID'] == question_id, 'Audio_Duration'].values[0]
-            # project_id = questions_df.loc[questions_df['Question_ID'] == question_id, 'Project_ID'].values[0]
+            # Match worker info
+            worker_row = roster_data[roster_data['Worker_Email'].str.lower() == email]
             
-            # Placeholder values for demonstration
-            worker_name = "Auto-Fetched Name"
-            role = "QC" 
-            audio_duration_seconds = 64.09
-            project_id = "ID-107"
-            
-            if status != "Completed Task":
-                # If it's a break or login, wipe the task-specific data for a clean log
-                question_id = ""
-                audio_duration_seconds = 0
-                project_id = ""
+            if worker_row.empty:
+                st.error("Email not found in Team_Roster! Check with your lead.")
+            else:
+                name = worker_row.iloc[0]['Worker_Name']
+                role = worker_row.iloc[0]['Role']
+                
+                # Default values
+                duration = 0
+                proj_id = ""
+                
+                # If they finished a file, look up the specs
+                if action == "Completed Task" and q_id:
+                    # Convert q_id to int if your sheet stores them as numbers
+                    match = questions_data[questions_data['Question_ID'].astype(str) == str(q_id)]
+                    if not match.empty:
+                        duration = match.iloc[0]['Audio_Duration']
+                        proj_id = match.iloc[0]['Project_ID']
+                    else:
+                        st.warning("Question ID not found in Master list. Logging with 0 duration.")
 
-            # 3. Create the exact row for your Task_Logs sheet
-            new_row = [
-                log_id, question_id, audio_duration_seconds, email, 
-                worker_name, role, timestamp, shift_date, project_id, status
-            ]
-            
-            # 4. Save to Google Sheets
-            time.sleep(1) # API throttle protection
-            # sheet.append_row(new_row)
-            
-            st.success("Log saved successfully!")
-            
-            # Let's keep your team on track. 
-            # We convert the seconds from your tool into minutes to check against targets.
-            if role == "QC" and status == "Completed Task":
-                duration_mins = round(audio_duration_seconds / 60, 2)
-                st.info(f"Nice! That's {duration_mins} minutes closer to your 180-minute daily target.")
+                # Prepare the row for Task_Logs
+                # Columns: Log_ID, Question_ID, Audio_Duration, Worker_Email, Worker_Name, Role, Timestamp, Shift_Date, Project_ID, Task_Status
+                now = datetime.now()
+                new_row = [
+                    str(uuid.uuid4())[:8],
+                    q_id,
+                    duration,
+                    email,
+                    name,
+                    role,
+                    now.strftime("%m/%d/%Y %H:%M:%S"),
+                    now.strftime("%m/%d/%Y"),
+                    proj_id,
+                    action
+                ]
+                
+                logs_sheet.append_row(new_row)
+                st.success(f"Done! Logged '{action}' for {name}.")
+                
+                # Quick motivation for QC 180-min target
+                if role == "QC" and action == "Completed Task":
+                    mins = round(float(duration)/60, 2)
+                    st.info(f"That's {mins} mins added to your daily progress!")
