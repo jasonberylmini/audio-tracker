@@ -4,29 +4,27 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
-import time
 import uuid
+import time
 
 st.set_page_config(page_title="Production Tracker Pro", layout="wide")
 
-# -------------------------
+# --------------------------
 # TIME
-# -------------------------
+# --------------------------
 
 def get_ist_time():
     return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
-# -------------------------
+# --------------------------
 # GOOGLE CONNECTION
-# -------------------------
+# --------------------------
 
 @st.cache_resource
 def get_gspread_client():
 
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
-
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 
     return gspread.authorize(creds)
@@ -42,9 +40,9 @@ questions_sheet = sh.worksheet("Master_Questions")
 logs_sheet = sh.worksheet("Task_Logs")
 activity_sheet = sh.worksheet("User_Activity")
 
-# -------------------------
+# --------------------------
 # SAFE WRITE
-# -------------------------
+# --------------------------
 
 def append_row_retry(sheet, row):
 
@@ -59,9 +57,9 @@ def append_row_retry(sheet, row):
     return False
 
 
-# -------------------------
+# --------------------------
 # CACHE DATA
-# -------------------------
+# --------------------------
 
 @st.cache_data(ttl=10)
 def get_sheet_data(sheet_name):
@@ -75,10 +73,9 @@ def get_sheet_data(sheet_name):
 
     return pd.DataFrame(data[1:], columns=data[0])
 
-
-# -------------------------
+# --------------------------
 # SESSION STATE
-# -------------------------
+# --------------------------
 
 if "user_status" not in st.session_state:
     st.session_state.user_status = "Logged Out"
@@ -86,9 +83,9 @@ if "user_status" not in st.session_state:
 if "saved_email" not in st.session_state:
     st.session_state.saved_email = None
 
-# -------------------------
+# --------------------------
 # LOGIN PANEL
-# -------------------------
+# --------------------------
 
 st.sidebar.title("Login Panel")
 
@@ -96,7 +93,6 @@ roster_df = get_sheet_data("Team_Roster")
 
 email_list = sorted(roster_df["Worker_Email"].unique().tolist())
 
-# remember previous email
 default_index = 0
 
 if st.session_state.saved_email in email_list:
@@ -113,7 +109,6 @@ if st.session_state.user_status != "Login":
     if st.sidebar.button("🟢 Login"):
 
         st.session_state.user_status = "Login"
-
         st.session_state.saved_email = user_email
 
         now = get_ist_time().strftime("%m/%d/%Y %H:%M:%S")
@@ -125,9 +120,22 @@ if st.session_state.user_status != "Login":
 else:
     st.sidebar.success("Logged in")
 
-# -------------------------
-# MAIN PAGE
-# -------------------------
+# --------------------------
+# DISPLAY USER INFO
+# --------------------------
+
+if st.session_state.user_status == "Login":
+
+    worker = roster_df[roster_df["Worker_Email"] == user_email].iloc[0]
+
+    worker_name = worker["Worker_Name"]
+    role = worker["Role"]
+
+    st.success(f"Logged in as: **{worker_name}**  |  Role: **{role}**")
+
+# --------------------------
+# MAIN APP
+# --------------------------
 
 st.title("🎙️ Production Tracker Pro")
 
@@ -138,20 +146,19 @@ if st.session_state.user_status == "Login":
     questions_df = get_sheet_data("Master_Questions")
     logs_df = get_sheet_data("Task_Logs")
 
-    # -------------------------
+    # --------------------------
     # AUDIO INPUT
-    # -------------------------
+    # --------------------------
 
     audio_id = st.text_input("Paste Audio ID")
 
     if audio_id == "":
         st.stop()
 
-    # validate audio id
+    # Validate Audio ID
     if audio_id not in questions_df["Question_ID"].astype(str).values:
 
         st.error("❌ Invalid Audio ID")
-
         st.stop()
 
     q_match = questions_df[questions_df["Question_ID"].astype(str) == audio_id]
@@ -161,7 +168,15 @@ if st.session_state.user_status == "Login":
 
     st.write(f"Max allowed duration: **{max_dur} seconds**")
 
-    task_mode = st.radio("Task Status", ["In Progress", "Completed"], horizontal=True)
+    # --------------------------
+    # DEFAULT COMPLETED
+    # --------------------------
+
+    task_mode = st.radio(
+        "Task Status",
+        ["Completed", "In Progress"],
+        horizontal=True
+    )
 
     duration = st.number_input(
         "Duration (s)",
@@ -169,9 +184,12 @@ if st.session_state.user_status == "Login":
         value=max_dur if task_mode == "Completed" else 0.0,
     )
 
+    # --------------------------
+    # SUBMIT TASK
+    # --------------------------
+
     if st.button("🚀 Submit Task"):
 
-        # duration check
         if duration > max_dur:
 
             st.error(f"Duration cannot exceed {max_dur}")
@@ -179,13 +197,13 @@ if st.session_state.user_status == "Login":
 
         existing = logs_df[logs_df["Question_ID"].astype(str) == audio_id]
 
-        # already completed
+        # Already completed
         if not existing.empty and "Completed" in existing["Task_Status"].values:
 
             st.error("❌ This audio has already been completed.")
             st.stop()
 
-        # already in progress
+        # Already in progress
         if not existing.empty and "In Progress" in existing["Task_Status"].values:
 
             row = existing[existing["Task_Status"] == "In Progress"].iloc[0]
@@ -195,7 +213,7 @@ if st.session_state.user_status == "Login":
                 st.error("❌ Another worker is already processing this audio.")
                 st.stop()
 
-            # same worker finishing task
+            # Same worker completing
             if task_mode == "Completed":
 
                 row_index = row.name
@@ -207,12 +225,9 @@ if st.session_state.user_status == "Login":
                 st.success("Task marked completed")
 
                 st.cache_data.clear()
-
                 st.stop()
 
-        # new entry
-
-        worker = roster_df[roster_df["Worker_Email"] == user_email].iloc[0]
+        # New entry
 
         now = get_ist_time().strftime("%m/%d/%Y %H:%M:%S")
 
@@ -221,8 +236,8 @@ if st.session_state.user_status == "Login":
             audio_id,
             duration,
             user_email,
-            worker["Worker_Name"],
-            worker["Role"],
+            worker_name,
+            role,
             now,
             now[:10],
             proj_id,
