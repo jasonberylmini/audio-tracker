@@ -4,21 +4,21 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
-import uuid
 import time
+import uuid
 
 st.set_page_config(page_title="Production Tracker Pro", layout="wide")
 
-# -----------------------------
-# TIME FUNCTION
-# -----------------------------
+# -------------------------
+# TIME
+# -------------------------
 
 def get_ist_time():
     return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
-# -----------------------------
+# -------------------------
 # GOOGLE CONNECTION
-# -----------------------------
+# -------------------------
 
 @st.cache_resource
 def get_gspread_client():
@@ -42,9 +42,9 @@ questions_sheet = sh.worksheet("Master_Questions")
 logs_sheet = sh.worksheet("Task_Logs")
 activity_sheet = sh.worksheet("User_Activity")
 
-# -----------------------------
+# -------------------------
 # SAFE WRITE
-# -----------------------------
+# -------------------------
 
 def append_row_retry(sheet, row):
 
@@ -59,9 +59,9 @@ def append_row_retry(sheet, row):
     return False
 
 
-# -----------------------------
+# -------------------------
 # CACHE DATA
-# -----------------------------
+# -------------------------
 
 @st.cache_data(ttl=10)
 def get_sheet_data(sheet_name):
@@ -76,16 +76,19 @@ def get_sheet_data(sheet_name):
     return pd.DataFrame(data[1:], columns=data[0])
 
 
-# -----------------------------
+# -------------------------
 # SESSION STATE
-# -----------------------------
+# -------------------------
 
 if "user_status" not in st.session_state:
     st.session_state.user_status = "Logged Out"
 
-# -----------------------------
+if "saved_email" not in st.session_state:
+    st.session_state.saved_email = None
+
+# -------------------------
 # LOGIN PANEL
-# -----------------------------
+# -------------------------
 
 st.sidebar.title("Login Panel")
 
@@ -93,13 +96,25 @@ roster_df = get_sheet_data("Team_Roster")
 
 email_list = sorted(roster_df["Worker_Email"].unique().tolist())
 
-user_email = st.sidebar.selectbox("Verify Email", email_list)
+# remember previous email
+default_index = 0
+
+if st.session_state.saved_email in email_list:
+    default_index = email_list.index(st.session_state.saved_email)
+
+user_email = st.sidebar.selectbox(
+    "Verify Email",
+    email_list,
+    index=default_index
+)
 
 if st.session_state.user_status != "Login":
 
     if st.sidebar.button("🟢 Login"):
 
         st.session_state.user_status = "Login"
+
+        st.session_state.saved_email = user_email
 
         now = get_ist_time().strftime("%m/%d/%Y %H:%M:%S")
 
@@ -110,9 +125,9 @@ if st.session_state.user_status != "Login":
 else:
     st.sidebar.success("Logged in")
 
-# -----------------------------
-# MAIN APP
-# -----------------------------
+# -------------------------
+# MAIN PAGE
+# -------------------------
 
 st.title("🎙️ Production Tracker Pro")
 
@@ -123,11 +138,23 @@ if st.session_state.user_status == "Login":
     questions_df = get_sheet_data("Master_Questions")
     logs_df = get_sheet_data("Task_Logs")
 
-    q_list = sorted(questions_df["Question_ID"].astype(str).unique().tolist())
+    # -------------------------
+    # AUDIO INPUT
+    # -------------------------
 
-    selected_q = st.selectbox("Select Question ID", q_list)
+    audio_id = st.text_input("Paste Audio ID")
 
-    q_match = questions_df[questions_df["Question_ID"].astype(str) == selected_q]
+    if audio_id == "":
+        st.stop()
+
+    # validate audio id
+    if audio_id not in questions_df["Question_ID"].astype(str).values:
+
+        st.error("❌ Invalid Audio ID")
+
+        st.stop()
+
+    q_match = questions_df[questions_df["Question_ID"].astype(str) == audio_id]
 
     max_dur = float(q_match.iloc[0]["Audio_Duration"])
     proj_id = q_match.iloc[0]["Project_ID"]
@@ -144,39 +171,31 @@ if st.session_state.user_status == "Login":
 
     if st.button("🚀 Submit Task"):
 
-        # -------------------------
-        # VALIDATE DURATION
-        # -------------------------
-
+        # duration check
         if duration > max_dur:
 
-            st.error(f"Duration cannot exceed {max_dur} seconds")
+            st.error(f"Duration cannot exceed {max_dur}")
             st.stop()
 
-        # -------------------------
-        # CHECK EXISTING RECORDS
-        # -------------------------
+        existing = logs_df[logs_df["Question_ID"].astype(str) == audio_id]
 
-        existing = logs_df[logs_df["Question_ID"].astype(str) == selected_q]
-
-        # CASE 1: already completed
+        # already completed
         if not existing.empty and "Completed" in existing["Task_Status"].values:
 
             st.error("❌ This audio has already been completed.")
             st.stop()
 
-        # CASE 2: already in progress
+        # already in progress
         if not existing.empty and "In Progress" in existing["Task_Status"].values:
 
             row = existing[existing["Task_Status"] == "In Progress"].iloc[0]
 
-            # another worker trying
             if row["Worker_Email"] != user_email:
 
-                st.error("❌ This audio is already being processed by another worker.")
+                st.error("❌ Another worker is already processing this audio.")
                 st.stop()
 
-            # same worker completing
+            # same worker finishing task
             if task_mode == "Completed":
 
                 row_index = row.name
@@ -185,15 +204,13 @@ if st.session_state.user_status == "Login":
                 logs_sheet.update_cell(sheet_row, 3, duration)
                 logs_sheet.update_cell(sheet_row, 10, "Completed")
 
-                st.success("Task marked as completed!")
+                st.success("Task marked completed")
 
                 st.cache_data.clear()
 
                 st.stop()
 
-        # -------------------------
-        # NEW TASK ENTRY
-        # -------------------------
+        # new entry
 
         worker = roster_df[roster_df["Worker_Email"] == user_email].iloc[0]
 
@@ -201,7 +218,7 @@ if st.session_state.user_status == "Login":
 
         row = [
             str(uuid.uuid4())[:8],
-            selected_q,
+            audio_id,
             duration,
             user_email,
             worker["Worker_Name"],
