@@ -1,0 +1,11 @@
+{
+  "name": "audiolog-pro",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tailwindcss -i ./input.css -o ./styles.css --minify",
+    "watch": "tailwindcss -i ./input.css -o ./styles.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

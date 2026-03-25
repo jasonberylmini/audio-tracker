@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department Pulse | AudioLog Pro</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="styles.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f5f7; color: #0f172a; }
+        .data-numbers { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        .panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .chart-container { position: relative; height: 400px; width: 100%; }
+        
+        .enterprise-table { width: 100%; text-align: left; border-collapse: collapse; }
+        .enterprise-table th { position: sticky; top: 0; background: #f8fafc; padding: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; z-index: 10; }
+        .enterprise-table td { padding: 10px 12px; font-size: 11px; font-weight: 600; border-bottom: 1px solid #f1f5f9; transition: background 0.1s; }
+        .enterprise-table tbody tr:hover td { background-color: #f8fafc; }
+        
+        .val-zero { color: #94a3b8; }
+        .val-active { color: #1d4ed8; font-weight: 800; }
+        .val-warning { color: #d97706; font-weight: 800; }
+        .val-danger { color: #e11d48; font-weight: 800; }
+
+        /* Role Tab Styling */
+        .tab-btn { padding: 10px 24px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 3px solid transparent; transition: all 0.2s; color: #64748b; cursor: pointer; }
+        .tab-btn:hover { color: #0f172a; background: #f8fafc; }
+        .tab-active-PROD { border-bottom-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+        .tab-active-QC { border-bottom-color: #d97706; color: #d97706; background: #fffbeb; }
+        .tab-active-SQC { border-bottom-color: #e11d48; color: #e11d48; background: #fff1f2; }
+    </style>
+</head>
+<body class="p-4 xl:p-8 pb-20">
+
+    <div id="auth-overlay" class="fixed inset-0 bg-slate-900 z-[999] flex flex-col items-center justify-center text-white">
+        <div class="w-10 h-10 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-xs font-black uppercase tracking-widest text-slate-400">Verifying Authorization...</p>
+    </div>
+
+    <div id="app" class="hidden w-full max-w-[1600px] mx-auto flex flex-col gap-6">
+
+        <div class="panel flex flex-col border-t-4 border-t-slate-800">
+            <div class="p-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-slate-200">
+                <div>
+                    <h1 class="text-2xl font-black text-slate-900 tracking-tight uppercase">Department Pulse</h1>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Cross-Team Efficiency & Timeline Analytics</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-4">
+                    <div>
+                        <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Target Shift Date</label>
+                        <input type="date" id="target-date" class="p-2 border border-slate-300 rounded font-bold text-xs uppercase text-blue-700 outline-none cursor-pointer bg-slate-50">
+                    </div>
+                    <button onclick="fetchMasterData()" class="bg-blue-600 text-white px-6 py-2 rounded font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 shadow-sm mt-3 border border-blue-700">Refresh Data</button>
+                    <a href="reports.html" class="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 mt-3">Master Reports</a>
+                    <a href="index.html" class="bg-slate-900 text-white px-5 py-2 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 shadow-sm mt-3">Workspace</a>
+                </div>
+            </div>
+
+            <div class="flex border-b border-slate-200 px-6 pt-2 gap-2" id="role-tabs">
+                <button onclick="switchRole('PROD')" id="tab-PROD" class="tab-btn tab-active-PROD">PROD Team</button>
+                <button onclick="switchRole('QC')" id="tab-QC" class="tab-btn">QC Team</button>
+                <button onclick="switchRole('SQC')" id="tab-SQC" class="tab-btn">SQC Team</button>
+            </div>
+        </div>
+
+        <div id="loader-spinner" class="hidden justify-center items-center py-10">
+            <div class="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+        </div>
+
+        <div id="vis-content" class="flex flex-col gap-6">
+            
+            <div class="panel flex flex-col max-h-[400px]">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center z-10">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-800"><span id="lbl-table-role">PROD</span> Efficiency Rankings</h3>
+                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Ranked by Secs/Min Velocity</span>
+                </div>
+                <div class="overflow-y-auto flex-1">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="w-12">Rank</th>
+                                <th>Worker Name</th>
+                                <th class="text-center">Total Audio Yield</th>
+                                <th class="text-center">Files Touched</th>
+                                <th class="text-center bg-slate-100">Active Work Time</th>
+                                <th class="text-center bg-blue-50 text-blue-800">Velocity (Secs/Min)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-rankings"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel flex flex-col">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 z-10">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Department Submission Timeline</h3>
+                </div>
+                <div class="p-4 flex items-center justify-center bg-white">
+                    <div class="chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel flex flex-col max-h-[600px]">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center z-10">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Master Chronological Ledger</h3>
+                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">All shift events across team</span>
+                </div>
+                <div class="overflow-y-auto flex-1">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th>Time (IST)</th>
+                                <th>Worker Name</th>
+                                <th>Audio ID</th>
+                                <th class="text-center">Audio Yield</th>
+                                <th class="text-right border-l border-slate-200 pl-4">Personal Time Gap</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-ledger"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://hpccuwrzifqrghlbvcmp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwY2N1d3J6aWZxcmdobGJ2Y21wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzk5NjEsImV4cCI6MjA4OTgxNTk2MX0.F8pgP5qnUQMsVnWAX_TQbs3JP6w74rC8eS_PKoAABgM'; // <--- PASTE KEY HERE
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let timelineChartInstance = null;
+        let RAW_LOGS = [];
+        let ALL_PROFILES = [];
+        let CURRENT_ROLE = 'PROD';
+
+        // Palette for distinguishing up to 20 workers on the scatter plot
+        const CHART_COLORS = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981', '#14b8a6', 
+            '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', 
+            '#ec4899', '#f43f5e', '#1e293b', '#334155', '#475569', '#64748b'
+        ];
+
+        const getLogicalShiftDate = (dateObj = new Date()) => {
+            const d = new Date(dateObj);
+            if (d.getHours() < 7) d.setDate(d.getDate() - 1);
+            return d.toISOString().split('T')[0];
+        };
+
+        const fmtHMS = (s) => {
+            if (!s || isNaN(s)) return "00:00:00";
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = Math.floor(s % 60);
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        };
+
+        async function init() {
+            try {
+                const { data: { session }, error } = await client.auth.getSession();
+                if (error || !session) return window.location.href = "index.html";
+                
+                const { data: profile } = await client.from('profiles').select('is_admin').ilike('email', session.user.email.trim()).single();
+                if (!profile || !profile.is_admin) return window.location.href = "index.html";
+
+                document.getElementById('auth-overlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('auth-overlay').classList.add('hidden'), 300);
+                document.getElementById('app').classList.remove('hidden');
+                
+                document.getElementById('target-date').value = getLogicalShiftDate();
+                
+                // Fetch profiles once (exclude admins)
+                const { data: profiles } = await client.from('profiles').select('*').eq('is_admin', false);
+                ALL_PROFILES = profiles || [];
+
+                fetchMasterData();
+
+            } catch (err) { window.location.href = "index.html"; }
+        }
+
+        async function fetchMasterData() {
+            const date = document.getElementById('target-date').value;
+            if (!date) return;
+            
+            document.getElementById('vis-content').classList.add('hidden');
+            document.getElementById('loader-spinner').classList.replace('hidden', 'flex');
+
+            const { data: logs } = await client.from('task_log')
+                .select('*')
+                .eq('shift_date', date)
+                .order('created_at', { ascending: true }); 
+
+            RAW_LOGS = logs || [];
+            
+            document.getElementById('loader-spinner').classList.replace('flex', 'hidden');
+            document.getElementById('vis-content').classList.remove('hidden');
+            
+            processAndRender();
+        }
+
+        function switchRole(role) {
+            CURRENT_ROLE = role;
+            
+            // UI Tab Switching
+            ['PROD', 'QC', 'SQC'].forEach(r => {
+                const btn = document.getElementById(`tab-${r}`);
+                btn.className = 'tab-btn'; // reset
+                if (r === role) btn.classList.add(`tab-active-${r}`);
+            });
+
+            document.getElementById('lbl-table-role').innerText = role;
+            processAndRender();
+        }
+
+        function processAndRender() {
+            // 1. Filter Members and Logs by Current Role
+            const members = ALL_PROFILES.filter(p => (p.role || '').toUpperCase() === CURRENT_ROLE);
+            const memberEmails = members.map(m => m.email);
+            const roleLogs = RAW_LOGS.filter(l => memberEmails.includes(l.worker_email));
+
+            // 2. Data Structures
+            const workerStats = {}; // For Leaderboard & Chart
+            const masterLedger = []; // For Chronological Table
+
+            // Initialize worker stats
+            members.forEach((m, idx) => {
+                workerStats[m.email] = {
+                    name: m.full_name,
+                    color: CHART_COLORS[idx % CHART_COLORS.length],
+                    totalSecs: 0,
+                    fileCount: 0,
+                    realMins: 0,
+                    scatterPoints: [],
+                    lastLogTime: null
+                };
+            });
+
+            // 3. Process Logs Chronologically (Crucial for gap math)
+            roleLogs.forEach((log) => {
+                const w = workerStats[log.worker_email];
+                if (!w) return;
+
+                const submitTime = new Date(log.created_at);
+                const currentAudioSecs = parseFloat(log.logged_seconds);
+                
+                w.totalSecs += currentAudioSecs;
+                w.fileCount += 1;
+
+                // Gap Calculation
+                let gapMins = 0;
+                let gapString = "START SHIFT";
+                let gapClass = "text-slate-400";
+
+                if (w.lastLogTime) {
+                    const diffMs = submitTime - w.lastLogTime;
+                    gapMins = Math.round(diffMs / 60000);
+                    
+                    if (gapMins > 60) {
+                        gapString = `${gapMins} mins (BREAK)`;
+                        gapClass = "val-danger";
+                    } else if (gapMins > 15) {
+                        gapString = `${gapMins} mins`;
+                        gapClass = "val-warning";
+                        w.realMins += gapMins;
+                    } else {
+                        gapString = `${gapMins} mins`;
+                        gapClass = "text-slate-700 font-bold";
+                        w.realMins += gapMins;
+                    }
+                } else {
+                    w.realMins += 10; // Assume 10 mins for first task
+                }
+
+                w.lastLogTime = submitTime;
+
+                // Save to Master Ledger
+                masterLedger.push({
+                    timeObj: submitTime,
+                    timeStr: submitTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    name: w.name,
+                    audioId: log.audio_id,
+                    secs: currentAudioSecs,
+                    gapString: gapString,
+                    gapClass: gapClass
+                });
+
+                // Save to Scatter Points
+                w.scatterPoints.push({
+                    x: submitTime,
+                    y: currentAudioSecs,
+                    audioId: log.audio_id
+                });
+            });
+
+            // 4. Calculate Velocity & Build Leaderboard Array
+            const leaderboardData = Object.values(workerStats).map(w => {
+                w.velocity = w.realMins > 0 ? (w.totalSecs / w.realMins) : 0;
+                return w;
+            }).filter(w => w.fileCount > 0); // Only show people who actually worked
+
+            // Sort Leaderboard by Velocity (Fastest first)
+            leaderboardData.sort((a, b) => b.velocity - a.velocity);
+
+            // 5. Render Leaderboard Table
+            const tbodyRank = document.getElementById('tbody-rankings');
+            tbodyRank.innerHTML = "";
+            leaderboardData.forEach((w, index) => {
+                const avgGap = Math.round(w.realMins / w.fileCount);
+                tbodyRank.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="font-black text-slate-400">${index + 1}</td>
+                        <td class="uppercase font-bold text-slate-900 flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" style="background-color: ${w.color}"></span>
+                            <a href="profile.html?email=${w.email}" class="hover:text-blue-600 hover:underline cursor-pointer">${w.name}</a>
+                        </td>
+                        <td class="data-numbers text-center val-active">${fmtHMS(w.totalSecs)}</td>
+                        <td class="data-numbers text-center">${w.fileCount}</td>
+                        <td class="data-numbers text-center bg-slate-50">${w.realMins} mins (Avg ~${avgGap}m)</td>
+                        <td class="data-numbers text-center bg-blue-50 font-black text-blue-700 text-sm">${w.velocity.toFixed(1)}</td>
+                    </tr>
+                `);
+            });
+
+            // 6. Render Scatter Plot
+            renderTeamChart(leaderboardData);
+
+            // 7. Render Master Ledger (Already sorted chronologically because RAW_LOGS was)
+            const tbodyLedger = document.getElementById('tbody-ledger');
+            tbodyLedger.innerHTML = "";
+            masterLedger.forEach(item => {
+                tbodyLedger.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="data-numbers text-slate-800">${item.timeStr}</td>
+                        <td class="uppercase font-bold text-slate-700">${item.name}</td>
+                        <td class="font-bold text-slate-900 uppercase">${item.audioId}</td>
+                        <td class="data-numbers text-center text-blue-700 font-bold">${item.secs === 0 ? '0' : fmtHMS(item.secs)}</td>
+                        <td class="text-right data-numbers border-l border-slate-200 pl-4 ${item.gapClass}">${item.gapString}</td>
+                    </tr>
+                `);
+            });
+
+            if (masterLedger.length === 0) {
+                tbodyLedger.innerHTML = `<tr><td colspan="5" class="text-center p-8 text-slate-400 font-bold uppercase">No data found for this department today.</td></tr>`;
+                tbodyRank.innerHTML = `<tr><td colspan="6" class="text-center p-8 text-slate-400 font-bold uppercase">No data found for this department today.</td></tr>`;
+            }
+        }
+
+        function renderTeamChart(leaderboardData) {
+            if (timelineChartInstance) timelineChartInstance.destroy();
+            
+            // Build datasets for chart (One dataset per worker)
+            const datasets = leaderboardData.map(w => {
+                return {
+                    label: w.name,
+                    data: w.scatterPoints,
+                    backgroundColor: w.color,
+                    borderColor: w.color,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                };
+            });
+
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            timelineChartInstance = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'right',
+                            labels: { boxWidth: 10, font: { family: 'Inter', size: 10, weight: 'bold' } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    const pt = ctx.raw;
+                                    return `${ctx.dataset.label} | ID: ${pt.audioId} | Yield: ${pt.y}s | Time: ${pt.x.toLocaleTimeString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'hour', tooltipFormat: 'p' },
+                            title: { display: true, text: 'Clock Time (IST)', font: {weight: 'bold'} }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Audio Seconds Processed', font: {weight: 'bold'} }
+                        }
+                    }
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>

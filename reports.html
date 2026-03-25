@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Analytics | AudioLog Pro</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="styles.css" rel="stylesheet">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Base & Resets */
+        body { font-family: 'Inter', sans-serif; background-color: #f4f5f7; color: #0f172a; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+        .data-numbers { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+        
+        /* Enterprise Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Component Architecture */
+        .panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+        
+        /* Advanced Table Engineering */
+        .table-container { width: 100%; overflow-x: auto; }
+        .enterprise-table { width: max-content; text-align: left; border-collapse: separate; border-spacing: 0; background: #fff; }
+        
+        .enterprise-table th {
+            position: sticky; top: 0; z-index: 10;
+            background-color: #f8fafc; padding: 10px 16px;
+            font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #475569;
+            border-bottom: 2px solid #cbd5e1; border-right: 1px solid #e2e8f0;
+            white-space: nowrap; backdrop-filter: blur(4px);
+        }
+        
+        .enterprise-table td {
+            padding: 8px 16px; font-size: 11px; font-weight: 600; color: #1e293b;
+            border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9;
+            white-space: nowrap; transition: background-color 0.1s;
+        }
+
+        /* Edge Case Borders */
+        .enterprise-table th:last-child, .enterprise-table td:last-child { border-right: none; }
+        .enterprise-table tbody tr:hover td { background-color: #f8fafc; }
+        .enterprise-table tbody tr:last-child td { border-bottom: none; }
+
+        /* Thematic Data Headers (Data-Ink Ratio Optimized) */
+        .theme-prod { border-top: 3px solid #16a34a; }
+        .theme-qc { border-top: 3px solid #d97706; }
+        .theme-sqc { border-top: 3px solid #e11d48; }
+        .theme-hourly { border-top: 3px solid #334155; }
+
+        /* Conditional Data Classes */
+        .val-zero { color: #94a3b8; font-weight: 500; }
+        .val-active { color: #1d4ed8; font-weight: 800; }
+        .cell-met { background-color: #f0fdf4 !important; color: #166534 !important; font-weight: 800; }
+        .cell-gap { background-color: #fef2f2 !important; color: #991b1b !important; font-weight: 800; }
+        
+        /* Grand Total Rows */
+        .row-total td { background-color: #0f172a !important; color: #ffffff !important; border-top: 2px solid #000; font-weight: 800; }
+
+        /* Input Engineering */
+        .control-input {
+            width: 100%; padding: 6px 10px; font-size: 11px; font-weight: 700; color: #0f172a;
+            border: 1px solid #cbd5e1; border-radius: 4px; background: #ffffff;
+            font-family: 'JetBrains Mono', monospace; text-align: center; outline: none; transition: all 0.2s;
+        }
+        .control-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.1); }
+
+        /* Flawless Print Engine */
+        @media print {
+            @page { size: landscape; margin: 10mm; }
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .panel { border: 1px solid #94a3b8; box-shadow: none; break-inside: avoid; margin-bottom: 20px; }
+            .enterprise-table th { background-color: #f1f5f9 !important; border-bottom: 2px solid #64748b; color: #000; -webkit-print-color-adjust: exact; }
+            .enterprise-table td { border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; color: #000; }
+            .row-total td { background-color: #e2e8f0 !important; color: #000 !important; border-top: 2px solid #000; -webkit-print-color-adjust: exact; }
+            
+            /* PRINT FIX: Distinct Visual Formatting for Target Gaps/Successes */
+            .cell-met { background-color: transparent !important; color: #000 !important; font-style: italic; }
+            .cell-met::before { content: "✓ "; font-weight: bold; }
+            .cell-gap { background-color: transparent !important; color: #000 !important; font-weight: 900; }
+            .cell-gap::before { content: "* "; }
+            
+            .grid { display: block; }
+        }
+    </style>
+</head>
+<body class="p-4 xl:p-8 pb-20">
+
+    <div id="auth-overlay" class="fixed inset-0 bg-slate-900 z-[999] flex flex-col items-center justify-center text-white transition-opacity duration-300">
+        <div class="w-10 h-10 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-xs font-black uppercase tracking-widest text-slate-400">Verifying Admin Privileges...</p>
+    </div>
+
+    <div id="app" class="hidden w-full max-w-[1800px] mx-auto flex flex-col gap-6">
+
+        <div class="no-print panel w-full flex flex-col xl:flex-row justify-between bg-white border-b-4 border-b-slate-800">
+            
+            <div class="p-6 flex-1 flex justify-between items-start border-b xl:border-b-0 xl:border-r border-slate-200">
+                <div>
+                    <h1 class="text-2xl font-black text-slate-900 tracking-tight uppercase">Master Analytics</h1>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">AudioLog Enterprise Engine</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="window.print()" class="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                        Print PDF
+                    </button>
+                    <a href="visualizations.html" class="bg-indigo-600 text-white border border-indigo-700 px-5 py-2 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-700 transition-colors shadow-sm">Employee X-Ray</a>
+                    <a href="index.html" class="bg-blue-600 text-white border border-blue-700 px-5 py-2 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-sm">Workspace</a>
+                </div>
+            </div>
+
+            <div class="p-6 flex-2 bg-slate-50 flex flex-col justify-center">
+                <div class="flex flex-wrap items-end gap-6 mb-4">
+                    <div class="w-40">
+                        <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Target Shift Date</label>
+                        <input type="date" id="report-date" class="w-full p-2 border border-slate-300 rounded text-xs font-bold uppercase text-blue-700 outline-none cursor-pointer focus:border-blue-500 bg-white">
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer pb-2 group">
+                        <input type="checkbox" id="include-sunday" class="w-4 h-4 cursor-pointer accent-blue-600">
+                        <span class="text-[10px] font-bold text-slate-600 uppercase group-hover:text-blue-600 transition-colors">Include Sunday target calculation</span>
+                    </label>
+                    <div id="sync-indicator" class="hidden items-center gap-2 pb-2">
+                        <div class="w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Crunching Data...</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Hr Target</label><input type="number" id="tgt-hourly" value="2400" class="control-input"></div>
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Daily PROD</label><input type="number" id="tgt-d-prod" value="21600" class="control-input"></div>
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Daily QC</label><input type="number" id="tgt-d-qc" value="21600" class="control-input"></div>
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Daily SQC</label><input type="number" id="tgt-d-sqc" value="21600" class="control-input"></div>
+                    
+                    <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Wk PROD (Auto)</label><input type="text" id="tgt-w-prod" readonly class="control-input bg-slate-100 text-slate-500 border-transparent"></div>
+                    <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Wk QC (Auto)</label><input type="text" id="tgt-w-qc" readonly class="control-input bg-slate-100 text-slate-500 border-transparent"></div>
+                    <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Wk SQC (Auto)</label><input type="text" id="tgt-w-sqc" readonly class="control-input bg-slate-100 text-slate-500 border-transparent"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full flex items-end justify-between border-b-2 border-slate-800 pb-2 mt-4 px-1">
+            <h2 id="formatted-date-display" class="text-2xl font-black text-slate-900 uppercase tracking-tight">Initializing Date...</h2>
+            <span class="no-print text-[10px] font-bold text-slate-400 uppercase tracking-widest">Confidential Reporting</span>
+        </div>
+
+        <div class="w-full flex flex-col xl:flex-row flex-wrap gap-6 items-start">
+            
+            <div class="panel theme-prod w-full xl:w-fit max-w-full flex flex-col">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">PROD Daily Operations Ledger</h3>
+                </div>
+                <div class="table-container max-h-[600px] overflow-y-auto">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-12">Worker Name</th>
+                                <th class="text-center px-6">Duration</th>
+                                <th class="pr-12 border-l-2 border-l-slate-300 pl-4">Worker Name</th>
+                                <th class="text-center px-6">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-daily-prod"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel theme-qc w-full xl:w-fit max-w-full flex flex-col">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">QC Ledger</h3>
+                </div>
+                <div class="table-container max-h-[600px] overflow-y-auto">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-16">Worker Name</th>
+                                <th class="text-center px-8">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-daily-qc"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel theme-sqc w-full xl:w-fit max-w-full flex flex-col">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">SQC Ledger</h3>
+                </div>
+                <div class="table-container max-h-[600px] overflow-y-auto">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-16">Worker Name</th>
+                                <th class="text-center px-8">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-daily-sqc"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="panel theme-hourly w-full xl:w-fit max-w-full flex flex-col items-start">
+            <div class="p-3 border-b border-slate-200 bg-slate-50 w-full">
+                <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">Hourly Production Velocity</h3>
+            </div>
+            <div class="table-container w-full">
+                <table class="enterprise-table">
+                    <thead>
+                        <tr>
+                            <th class="pr-12">Time Period (IST)</th>
+                            <th class="text-center px-8">Target</th>
+                            <th class="text-center px-8 text-blue-700">Actual Yield</th>
+                            <th class="text-center px-8 text-slate-800">Cumulative Snapshot</th>
+                            <th class="text-center px-8">Target Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-hourly"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="w-full h-6 no-print"></div>
+
+        <div class="w-full flex flex-col gap-6 items-start">
+            
+            <div class="panel theme-prod w-full xl:w-fit max-w-full">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">PROD Master Weekly Trajectory</h3>
+                </div>
+                <div class="table-container">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-16">Worker Name</th>
+                                <th class="text-center w-16">Mon</th><th class="text-center w-16">Tue</th><th class="text-center w-16">Wed</th>
+                                <th class="text-center w-16">Thu</th><th class="text-center w-16">Fri</th><th class="text-center w-16">Sat</th>
+                                <th class="text-center w-16" id="th-sun-prod">Sun</th>
+                                <th class="text-center px-6 bg-slate-100 border-l border-slate-300">Wk Total</th>
+                                <th class="text-center px-6 bg-slate-50 border-l border-slate-200">Target Gap</th>
+                                <th class="text-center px-6 bg-blue-50 text-blue-800 border-l border-blue-200">Req. Per Day</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-weekly-prod"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel theme-qc w-full xl:w-fit max-w-full">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">QC Master Weekly Trajectory</h3>
+                </div>
+                <div class="table-container">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-16">Worker Name</th>
+                                <th class="text-center w-16">Mon</th><th class="text-center w-16">Tue</th><th class="text-center w-16">Wed</th>
+                                <th class="text-center w-16">Thu</th><th class="text-center w-16">Fri</th><th class="text-center w-16">Sat</th>
+                                <th class="text-center w-16" id="th-sun-qc">Sun</th>
+                                <th class="text-center px-6 bg-slate-100 border-l border-slate-300">Wk Total</th>
+                                <th class="text-center px-6 bg-slate-50 border-l border-slate-200">Target Gap</th>
+                                <th class="text-center px-6 bg-blue-50 text-blue-800 border-l border-blue-200">Req. Per Day</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-weekly-qc"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel theme-sqc w-full xl:w-fit max-w-full">
+                <div class="p-3 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">SQC Master Weekly Trajectory</h3>
+                </div>
+                <div class="table-container">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th class="pr-16">Worker Name</th>
+                                <th class="text-center w-16">Mon</th><th class="text-center w-16">Tue</th><th class="text-center w-16">Wed</th>
+                                <th class="text-center w-16">Thu</th><th class="text-center w-16">Fri</th><th class="text-center w-16">Sat</th>
+                                <th class="text-center w-16" id="th-sun-sqc">Sun</th>
+                                <th class="text-center px-6 bg-slate-100 border-l border-slate-300">Wk Total</th>
+                                <th class="text-center px-6 bg-slate-50 border-l border-slate-200">Target Gap</th>
+                                <th class="text-center px-6 bg-blue-50 text-blue-800 border-l border-blue-200">Req. Per Day</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-weekly-sqc"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://hpccuwrzifqrghlbvcmp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwY2N1d3J6aWZxcmdobGJ2Y21wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzk5NjEsImV4cCI6MjA4OTgxNTk2MX0.F8pgP5qnUQMsVnWAX_TQbs3JP6w74rC8eS_PKoAABgM'; // <--- CRITICAL: PASTE KEY HERE (DO NOT LEAVE EXPOSED)
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const Engine = {
+            profiles: [],
+            logs: [],
+            currentShift: '',
+            weekRange: { start: '', end: '', dates: [] },
+            daysLeftInWeek: 1,
+            isSundayIncluded: false,
+            targets: { hr: 0, dProd: 0, dQc: 0, dSqc: 0, wProd: 0, wQc: 0, wSqc: 0 }
+        };
+
+        const getLogicalShiftDate = (dateObj = new Date()) => {
+            const d = new Date(dateObj);
+            if (d.getHours() < 7) d.setDate(d.getDate() - 1);
+            return d.toISOString().split('T')[0];
+        };
+
+        const fmtHMS = (s) => {
+            if (!s || isNaN(s)) return "00:00:00";
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = Math.floor(s % 60);
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        };
+
+        async function init() {
+            try {
+                const { data: { session }, error } = await client.auth.getSession();
+                if (error || !session) return window.location.href = "index.html";
+                
+                const { data: profile } = await client.from('profiles').select('is_admin').ilike('email', session.user.email.trim()).single();
+                if (!profile || !profile.is_admin) return window.location.href = "index.html";
+
+                document.getElementById('auth-overlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('auth-overlay').classList.add('hidden'), 300);
+                document.getElementById('app').classList.remove('hidden');
+                
+                document.getElementById('report-date').value = getLogicalShiftDate();
+                
+                const { data: profiles } = await client.from('profiles').select('*').eq('is_admin', false);
+                Engine.profiles = profiles || [];
+
+                attachListeners();
+                executeDataPipeline();
+
+            } catch (err) { window.location.href = "index.html"; }
+        }
+
+        async function executeDataPipeline() {
+            const spinner = document.getElementById('sync-indicator');
+            spinner.classList.replace('hidden', 'flex');
+
+            try {
+                updateEngineState();
+                
+                const dObj = new Date(Engine.currentShift);
+                const opts = { month: 'long', weekday: 'long', day: 'numeric', year: 'numeric' };
+                document.getElementById('formatted-date-display').innerText = dObj.toLocaleDateString('en-US', opts);
+
+                const { data: logs } = await client.from('task_log')
+                    .select('worker_email, logged_seconds, shift_date, created_at')
+                    .gte('shift_date', Engine.weekRange.start)
+                    .lte('shift_date', Engine.weekRange.end);
+                
+                Engine.logs = logs || [];
+
+                renderDailyGrid();
+                renderHourlySnapshot();
+                renderWeeklyLedgers();
+
+            } catch (error) {
+                console.error("Pipeline Failure:", error);
+                alert("Data sync failed. Check console.");
+            } finally {
+                spinner.classList.replace('flex', 'hidden');
+            }
+        }
+
+        function updateEngineState() {
+            Engine.currentShift = document.getElementById('report-date').value;
+            Engine.isSundayIncluded = document.getElementById('include-sunday').checked;
+            
+            Engine.targets.hr = parseFloat(document.getElementById('tgt-hourly').value) || 0;
+            Engine.targets.dProd = parseFloat(document.getElementById('tgt-d-prod').value) || 0;
+            Engine.targets.dQc = parseFloat(document.getElementById('tgt-d-qc').value) || 0;
+            Engine.targets.dSqc = parseFloat(document.getElementById('tgt-d-sqc').value) || 0;
+            
+            const multiplier = Engine.isSundayIncluded ? 7 : 6;
+            Engine.targets.wProd = Engine.targets.dProd * multiplier;
+            Engine.targets.wQc = Engine.targets.dQc * multiplier;
+            Engine.targets.wSqc = Engine.targets.dSqc * multiplier;
+            
+            document.getElementById('tgt-w-prod').value = Engine.targets.wProd;
+            document.getElementById('tgt-w-qc').value = Engine.targets.wQc;
+            document.getElementById('tgt-w-sqc').value = Engine.targets.wSqc;
+
+            const d = new Date(Engine.currentShift);
+            const dayOfWeek = d.getDay();
+            const diffToMon = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            
+            const startD = new Date(d.setDate(diffToMon));
+            Engine.weekRange.start = startD.toISOString().split('T')[0];
+            
+            const endD = new Date(startD);
+            endD.setDate(startD.getDate() + 6);
+            Engine.weekRange.end = endD.toISOString().split('T')[0];
+
+            Engine.weekRange.dates = [];
+            let curr = new Date(Engine.weekRange.start);
+            for(let i=0; i<7; i++) {
+                Engine.weekRange.dates.push(curr.toISOString().split('T')[0]);
+                curr.setDate(curr.getDate() + 1);
+            }
+
+            const selIndex = Engine.weekRange.dates.indexOf(Engine.currentShift);
+            Engine.daysLeftInWeek = Math.max(1, multiplier - (selIndex !== -1 ? selIndex : 0));
+        }
+
+        function aggregateUserData(roleFilter) {
+            const members = Engine.profiles.filter(p => (p.role || '').toUpperCase() === roleFilter);
+            
+            return members.map(m => {
+                const myLogs = Engine.logs.filter(l => l.worker_email === m.email);
+                
+                let shiftSecs = 0;
+                let weekSecs = 0;
+                let weekDaysArr = [0,0,0,0,0,0,0];
+
+                myLogs.forEach(l => {
+                    const secs = parseFloat(l.logged_seconds);
+                    if (l.shift_date === Engine.currentShift) shiftSecs += secs;
+                    
+                    const dayIdx = Engine.weekRange.dates.indexOf(l.shift_date);
+                    if (dayIdx !== -1) {
+                        weekDaysArr[dayIdx] += secs;
+                        if (Engine.isSundayIncluded || dayIdx < 6) {
+                            weekSecs += secs;
+                        }
+                    }
+                });
+
+                return { name: m.full_name, email: m.email, shiftSecs, weekSecs, weekDaysArr };
+            }).sort((a, b) => b.shiftSecs - a.shiftSecs);
+        }
+
+        function renderDailyGrid() {
+            const buildCol = (data, tbodyId) => {
+                const tbody = document.getElementById(tbodyId);
+                tbody.innerHTML = "";
+                let grand = 0;
+
+                data.forEach(row => {
+                    grand += row.shiftSecs;
+                    const format = row.shiftSecs === 0 
+                        ? `<td class="val-zero text-center">0</td>` 
+                        : `<td class="val-active data-numbers text-center text-blue-700">${fmtHMS(row.shiftSecs)}</td>`;
+                    
+                    tbody.insertAdjacentHTML('beforeend', `<tr><td class="uppercase"><a href="profile.html?email=${row.email}" class="text-slate-800 hover:text-blue-600 hover:underline cursor-pointer">${row.name}</a></td>${format}</tr>`);
+                });
+
+                tbody.insertAdjacentHTML('beforeend', `<tr class="row-total"><td>GRAND TOTAL</td><td class="data-numbers text-center text-yellow-400">${fmtHMS(grand)}</td></tr>`);
+            };
+
+            buildCol(aggregateUserData('QC'), 'tbody-daily-qc');
+            buildCol(aggregateUserData('SQC'), 'tbody-daily-sqc');
+
+            const prodData = aggregateUserData('PROD');
+            const tbodyProd = document.getElementById('tbody-daily-prod');
+            tbodyProd.innerHTML = "";
+            
+            let prodGrand = 0;
+            prodData.forEach(r => prodGrand += r.shiftSecs);
+
+            const half = Math.ceil(prodData.length / 2);
+            for (let i = 0; i < half; i++) {
+                const L = prodData[i];
+                const R = prodData[i + half];
+
+                const L_Fmt = L.shiftSecs === 0 ? `<td class="val-zero text-center">0</td>` : `<td class="val-active data-numbers text-center text-blue-700">${fmtHMS(L.shiftSecs)}</td>`;
+                
+                const R_Name = R ? R.name : '';
+                const R_Fmt = R ? (R.shiftSecs === 0 ? `<td class="val-zero text-center">0</td>` : `<td class="val-active data-numbers text-center text-blue-700">${fmtHMS(R.shiftSecs)}</td>`) : `<td></td>`;
+
+                tbodyProd.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="uppercase"><a href="profile.html?email=${L.email}" class="text-slate-800 hover:text-blue-600 hover:underline cursor-pointer">${L.name}</a></td>${L_Fmt}
+                        <td class="uppercase border-l-2 border-l-slate-200 pl-4"><a href="profile.html?email=${R.email}" class="text-slate-800 hover:text-blue-600 hover:underline cursor-pointer">${R_Name}</a></td>${R_Fmt}
+                    </tr>
+                `);
+            }
+
+            tbodyProd.insertAdjacentHTML('beforeend', `
+                <tr class="row-total">
+                    <td colspan="3">GRAND TOTAL</td>
+                    <td class="data-numbers text-center text-yellow-400">${fmtHMS(prodGrand)}</td>
+                </tr>
+            `);
+        }
+
+        function renderHourlySnapshot() {
+            const shiftLogs = Engine.logs.filter(l => l.shift_date === Engine.currentShift);
+            
+            const buckets = [
+                { l: "8:30 PM - 9:30 PM", v: 0 }, { l: "9:30 PM - 10:30 PM", v: 0 }, { l: "10:30 PM - 11:30 PM", v: 0 }, 
+                { l: "11:30 PM - 12:30 AM", v: 0 }, { l: "12:30 AM - 1:30 AM", v: 0 }, { l: "1:30 AM - 2:30 AM", v: 0 }, 
+                { l: "2:30 AM - 3:30 AM", v: 0 }, { l: "3:30 AM - 4:30 AM", v: 0 }, { l: "4:30 AM - 5:30 AM", v: 0 }, 
+                { l: "5:30 AM - 6:30 AM", v: 0 }, { l: "6:30 AM - 7:30 AM (OT)", v: 0 }
+            ];
+
+            shiftLogs.forEach(log => {
+                // FIX 2: Absolute Timezone Enforcement (IST = UTC+5:30)
+                const d = new Date(log.created_at);
+                const utcTime = d.getTime(); 
+                const istTime = new Date(utcTime + (5.5 * 60 * 60 * 1000));
+                
+                const h = istTime.getUTCHours();
+                const m = istTime.getUTCMinutes();
+
+                let shiftedH = h >= 20 ? h - 20 : h + 4; 
+                let mFrom8PM = shiftedH * 60 + m;
+                const secs = parseFloat(log.logged_seconds);
+
+                if (mFrom8PM >= 30 && mFrom8PM < 90) buckets[0].v += secs;
+                else if (mFrom8PM >= 90 && mFrom8PM < 150) buckets[1].v += secs;
+                else if (mFrom8PM >= 150 && mFrom8PM < 210) buckets[2].v += secs;
+                else if (mFrom8PM >= 210 && mFrom8PM < 270) buckets[3].v += secs;
+                else if (mFrom8PM >= 270 && mFrom8PM < 330) buckets[4].v += secs;
+                else if (mFrom8PM >= 330 && mFrom8PM < 390) buckets[5].v += secs;
+                else if (mFrom8PM >= 390 && mFrom8PM < 450) buckets[6].v += secs;
+                else if (mFrom8PM >= 450 && mFrom8PM < 510) buckets[7].v += secs;
+                else if (mFrom8PM >= 510 && mFrom8PM < 570) buckets[8].v += secs;
+                else if (mFrom8PM >= 570 && mFrom8PM < 630) buckets[9].v += secs;
+                else if (mFrom8PM >= 630 && mFrom8PM < 690) buckets[10].v += secs;
+            });
+
+            const tbody = document.getElementById('tbody-hourly');
+            tbody.innerHTML = "";
+            let cum = 0;
+
+            buckets.forEach(b => {
+                cum += b.v;
+                const remain = Engine.targets.hr - b.v;
+                
+                let gapHtml = remain <= 0 
+                    ? `<td class="text-center cell-met data-numbers">MET (+${fmtHMS(Math.abs(remain))})</td>` 
+                    : `<td class="text-center cell-gap data-numbers">${fmtHMS(remain)} Gap</td>`;
+
+                const actClass = b.v === 0 ? 'val-zero text-center' : 'val-active data-numbers text-center text-blue-700';
+
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="font-bold text-slate-700">${b.l}</td>
+                        <td class="data-numbers text-center text-slate-500">${fmtHMS(Engine.targets.hr)}</td>
+                        <td class="${actClass}">${b.v===0?'0':fmtHMS(b.v)}</td>
+                        <td class="data-numbers text-center font-black">${fmtHMS(cum)}</td>
+                        ${gapHtml}
+                    </tr>
+                `);
+            });
+        }
+
+        function renderWeeklyLedgers() {
+            const disp = Engine.isSundayIncluded ? 'table-cell' : 'none';
+            document.getElementById('th-sun-prod').style.display = disp;
+            document.getElementById('th-sun-qc').style.display = disp;
+            document.getElementById('th-sun-sqc').style.display = disp;
+
+            const logicalToday = getLogicalShiftDate();
+
+            const buildWkTable = (roleFilter, tbodyId, dailyTgt, weeklyTgt) => {
+                let data = aggregateUserData(roleFilter);
+                data.sort((a,b) => b.weekSecs - a.weekSecs);
+
+                const tbody = document.getElementById(tbodyId);
+                tbody.innerHTML = "";
+
+                data.forEach(row => {
+                    const remain = Math.max(0, weeklyTgt - row.weekSecs);
+                    const reqPd = remain / Engine.daysLeftInWeek;
+
+                    let daysHtml = row.weekDaysArr.map((dSecs, idx) => {
+                        if (!Engine.isSundayIncluded && idx === 6) return ''; 
+                        
+                        const dateStr = Engine.weekRange.dates[idx];
+                        let cellCls = 'data-numbers text-center';
+
+                        if (dateStr <= logicalToday) {
+                            if (dSecs >= dailyTgt) cellCls += ' cell-met';
+                            else cellCls += ' cell-gap';
+                        } else {
+                            if (dSecs === 0) cellCls = 'val-zero text-center';
+                        }
+
+                        return `<td class="${cellCls}">${dSecs===0 ? '0' : fmtHMS(dSecs)}</td>`;
+                    }).join('');
+
+                    tbody.insertAdjacentHTML('beforeend', `
+                        <tr>
+                            <td class="uppercase font-bold"><a href="profile.html?email=${row.email}" class="text-slate-800 hover:text-blue-600 hover:underline cursor-pointer">${row.name}</a></td>
+                            ${daysHtml}
+                            <td class="data-numbers text-center font-black text-blue-700 bg-slate-50 border-l border-slate-300">${fmtHMS(row.weekSecs)}</td>
+                            <td class="data-numbers text-center text-slate-500 bg-white border-l border-slate-200">${fmtHMS(remain)}</td>
+                            <td class="data-numbers text-center font-black text-blue-900 bg-blue-50 border-l border-blue-200">${fmtHMS(reqPd)}</td>
+                        </tr>
+                    `);
+                });
+            };
+
+            buildWkTable('PROD', 'tbody-weekly-prod', Engine.targets.dProd, Engine.targets.wProd);
+            buildWkTable('QC', 'tbody-weekly-qc', Engine.targets.dQc, Engine.targets.wQc);
+            buildWkTable('SQC', 'tbody-weekly-sqc', Engine.targets.dSqc, Engine.targets.wSqc);
+        }
+
+        function attachListeners() {
+            const inputs = ['tgt-hourly', 'tgt-d-prod', 'tgt-d-qc', 'tgt-d-sqc', 'report-date', 'include-sunday'];
+            inputs.forEach(id => document.getElementById(id).addEventListener('change', executeDataPipeline));
+        }
+
+        init();
+    </script>
+</body>
+</html>

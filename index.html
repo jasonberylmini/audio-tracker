@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioLog Pro | Workspace</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="styles.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #0f172a; }
+        
+        .compact-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .compact-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .compact-scroll:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
+        
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        .toast-anim { animation: fadeUp 0.3s ease-out forwards; }
+        @keyframes fadeUp { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+        
+        .rank-1 { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); color: white; border-color: #fbbf24; box-shadow: 0 4px 10px -2px rgba(251, 191, 36, 0.4); transform: scale(1.01); z-index: 10; }
+        .rank-2 { background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%); color: #0f172a; border-color: #cbd5e1; box-shadow: 0 4px 10px -2px rgba(148, 163, 184, 0.4); }
+        .rank-3 { background: linear-gradient(135deg, #fdba74 0%, #c2410c 100%); color: white; border-color: #fdba74; box-shadow: 0 4px 10px -2px rgba(253, 186, 116, 0.4); }
+    </style>
+</head>
+<body class="min-h-screen lg:h-screen w-full bg-slate-100 text-sm flex flex-col lg:overflow-hidden">
+
+    <div id="toast-container" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none w-11/12 max-w-md"></div>
+    <div id="loader" class="fixed inset-0 bg-white flex flex-col items-center justify-center z-[150]">
+        <div class="w-8 h-8 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <p class="mt-4 text-xs font-bold text-slate-500 uppercase tracking-widest" id="loader-text">Syncing Enterprise Data</p>
+    </div>
+
+    <div id="login-screen" class="hidden fixed inset-0 bg-slate-50 flex items-center justify-center z-[100] px-4">
+        <div class="bg-white p-8 md:p-10 border border-slate-200 rounded-xl shadow-sm w-full max-w-sm text-center">
+            <h1 class="text-3xl font-black mb-2 tracking-tight">AudioLog Pro</h1>
+            <p class="text-slate-500 text-xs mb-8 uppercase tracking-widest font-bold">Authorized Personnel Only</p>
+            <button onclick="signIn()" class="w-full flex items-center justify-center gap-3 bg-blue-600 text-white py-4 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-md">
+                <img src="https://www.google.com/favicon.ico" class="w-5 h-5 bg-white rounded-full p-0.5"> Sign in with Google
+            </button>
+        </div>
+    </div>
+
+    <div id="app" class="hidden w-full max-w-[1500px] mx-auto p-2 sm:p-4 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+        
+        <header class="bg-white border border-slate-200 rounded-xl px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center shadow-sm shrink-0 gap-3">
+            <div class="flex items-center gap-3 sm:gap-4">
+                <div class="bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] sm:text-xs font-black uppercase tracking-widest shadow-sm" id="role-display">---</div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-black leading-none tracking-tight">WORKSPACE</h1>
+                    <p id="shift-display" class="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1 flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-green-500 rounded-full"></span> Syncing...
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 sm:gap-5">
+                <div class="text-right border-l border-slate-200 pl-4 sm:pl-5 hidden md:block">
+                    <p id="user-name" class="font-black leading-none text-base uppercase">---</p>
+                    <p id="user-email" class="text-[10px] text-slate-500 mt-1 font-semibold uppercase tracking-wider">---</p>
+                </div>
+                <button onclick="signOut()" class="bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors p-3 rounded-lg border border-slate-100" title="Sign Out">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                </button>
+            </div>
+        </header>
+
+        <div id="worker-layout" class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 pb-10 lg:pb-0">
+            
+            <div class="lg:col-span-3 flex flex-col gap-4 lg:h-full min-h-0">
+                <div class="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm relative overflow-hidden shrink-0">
+                    <div id="smart-glow" class="absolute top-0 left-0 w-full h-1 bg-blue-100 transition-colors duration-300"></div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">Log Task</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <input type="text" id="audioId" placeholder="AUDIO ID" class="w-full p-4 bg-slate-50 border border-slate-300 rounded-lg text-lg font-black uppercase focus:outline-none focus:border-blue-500 focus:bg-white text-center tracking-widest transition-all">
+                            <div id="id-hint" class="text-sm font-black mt-2 min-h-[24px] text-center uppercase leading-tight"></div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2.5">
+                            
+                            <div class="flex bg-slate-100 p-1.5 rounded-lg border border-slate-200" id="status-toggle-container">
+                                <button type="button" id="btn-status-completed" class="flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 bg-white shadow-sm text-blue-700" onclick="setStatus('COMPLETED')">Completed</button>
+                                <button type="button" id="btn-status-inprogress" class="flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 text-slate-500 hover:text-slate-800" onclick="setStatus('IN_PROGRESS')">In Progress</button>
+                            </div>
+                            <input type="hidden" id="status" value="COMPLETED">
+
+                            <div id="sec-input-container" class="hidden">
+                                <input type="number" id="seconds" placeholder="Manual Seconds" class="w-full p-3 border border-blue-300 rounded-lg text-base font-black bg-blue-50 focus:outline-none text-center">
+                            </div>
+                        </div>
+                        <button id="submitBtn" onclick="handleTaskSubmission()" class="w-full bg-blue-600 text-white font-black py-4 rounded-lg hover:bg-blue-700 transition-colors text-xs uppercase tracking-widest shadow-md">SUBMIT</button>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm flex-1 flex flex-col min-h-0">
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2 text-center shrink-0">My Shift Logs</h2>
+                    <div id="my-shift-logs" class="space-y-1.5 overflow-y-auto compact-scroll pr-1 flex-1 min-h-0"></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-5 flex flex-col gap-4 lg:h-full min-h-0">
+                <div class="bg-slate-900 text-white border border-slate-800 rounded-xl p-6 sm:p-8 shadow-lg text-center relative shrink-0">
+                    <h2 class="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Shift Production Total</h2>
+                    
+                    <div class="flex flex-col items-center justify-center gap-2 mb-4 group cursor-pointer" onclick="copyProductionTotal()" title="Click to copy duration">
+                        <div id="daily-total" class="text-6xl sm:text-7xl font-black tracking-tighter hover:text-blue-400 transition-colors">00:00:00</div>
+                        <div class="bg-slate-800 text-slate-300 text-[10px] sm:text-xs font-bold px-4 py-1.5 rounded flex items-center gap-1.5 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            CLICK TO COPY
+                        </div>
+                    </div>
+
+                    <div id="daily-remaining" class="text-sm sm:text-base font-black text-yellow-400 mb-6 uppercase tracking-widest">Remaining: ---</div>
+                    
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-[10px] sm:text-xs font-bold uppercase tracking-widest">
+                            <span class="text-slate-400">Target Progress</span>
+                            <span id="target-pct" class="text-blue-400">0%</span>
+                        </div>
+                        <div class="h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                            <div id="progress-bar" class="h-full bg-blue-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(59,130,246,0.8)]" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm flex-1 flex flex-col min-h-0">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2 shrink-0">
+                        <h2 class="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest">Weekly Tracking</h2>
+                        <span id="weekly-remaining" class="text-[10px] sm:text-sm font-bold text-blue-600 uppercase tracking-widest">Wk Remaining: ---</span>
+                    </div>
+                    <div class="overflow-x-auto w-full">
+                        <div id="weekly-chart" class="flex items-end gap-2 sm:gap-3 px-1 mt-2 h-[180px] min-w-[300px]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-4 lg:h-full h-auto min-h-0">
+                <div class="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm h-full flex flex-col min-h-0">
+                    <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 px-1 shrink-0">
+                        <h2 class="text-xs font-black text-slate-800 uppercase tracking-wider"><span id="lb-role-name" class="text-blue-600">---</span> RANKINGS</h2>
+                        <span class="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded uppercase tracking-widest border border-green-100">Live Sync</span>
+                    </div>
+                    <div id="leaderboard-list" class="space-y-2 overflow-y-auto compact-scroll pr-2 flex-1 min-h-0 pb-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="admin-layout" class="hidden flex-col gap-4 flex-1 min-h-0 pb-10 lg:pb-0">
+            <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-2 shrink-0">
+                <button onclick="switchAdminTab('audit')" id="tab-audit-btn" class="bg-blue-600 text-white border border-blue-600 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest shadow-md">Shift Audit</button>
+                <button onclick="switchAdminTab('personnel')" id="tab-personnel-btn" class="bg-white text-slate-500 border border-slate-200 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-slate-50">Manage System</button>
+                <a href="reports.html" target="_blank" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors flex items-center gap-1.5 ml-auto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Open Reports
+                </a>
+            </div>
+
+            <div id="subtab-audit" class="bg-white border border-slate-200 rounded-xl shadow-sm flex-1 flex flex-col lg:min-h-0 h-[600px]">
+                <div class="p-4 sm:p-5 flex flex-wrap justify-between items-center border-b border-slate-100 gap-4 shrink-0">
+                    <h2 class="text-sm sm:text-base font-black uppercase tracking-tight">Global Audit Log</h2>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="relative">
+                            <input type="text" id="audit-search" oninput="triggerAuditSearch()" placeholder="Search Audio ID..." class="pl-8 pr-3 py-2 border border-slate-300 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-widest focus:outline-none focus:border-blue-500 bg-slate-50 w-40 sm:w-56 transition-colors focus:bg-white">
+                            <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <button onclick="downloadMasterReport()" class="bg-slate-900 text-white px-4 py-2 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-widest shadow-sm">Export Full Audit</button>
+                        <button onclick="refreshAuditData()" class="bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-widest hover:bg-blue-100">Sync</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto overflow-y-auto compact-scroll flex-1 min-h-0">
+                    <table class="w-full text-left text-xs whitespace-nowrap min-w-[700px]">
+                        <thead class="bg-slate-50 text-slate-500 sticky top-0 border-b border-slate-200 shadow-sm z-10">
+                            <tr>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px]">Time</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px] text-blue-600">Shift Date</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px]">Worker Name</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px]">Audio ID</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px] text-center">Secs</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px] text-center">Status</th>
+                                <th class="p-3 sm:p-4 font-bold uppercase tracking-widest text-[10px] text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-audit-tbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="subtab-personnel" class="hidden grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto compact-scroll pb-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm h-fit">
+                    <h2 class="text-sm font-black uppercase tracking-tight border-b border-slate-100 pb-3 mb-5">User Registry & Overrides</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">Google Work Email</label>
+                            <input type="email" id="onboard-email" class="w-full p-2.5 border border-slate-300 rounded-md text-sm font-bold focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">Full Name</label>
+                            <input type="text" id="onboard-name" class="w-full p-2.5 border border-slate-300 rounded-md text-sm font-bold focus:border-blue-500 outline-none uppercase">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">Role</label>
+                                <select id="onboard-role" class="w-full p-2.5 border border-slate-300 rounded-md text-sm font-bold bg-white focus:border-blue-500 outline-none uppercase cursor-pointer">
+                                    <option value="PROD">PROD</option><option value="QC">QC</option><option value="SQC">SQC</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-widest">Custom Target</label>
+                                <input type="number" id="onboard-target" placeholder="Blank for default" class="w-full p-2.5 border border-slate-300 rounded-md text-sm font-bold focus:border-blue-500 outline-none bg-slate-50 text-center">
+                            </div>
+                        </div>
+                        <button onclick="onboardEmployee()" class="w-full bg-slate-900 text-white font-black py-3 rounded-md hover:bg-blue-600 text-xs uppercase tracking-widest mt-2 transition-colors shadow-sm">Add / Update User</button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 text-white rounded-xl p-5 sm:p-6 shadow-md border border-slate-800 h-fit">
+                    <h2 class="text-sm font-black uppercase tracking-tight border-b border-slate-700 pb-3 mb-5">Global Role Targets (Secs)</h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="text-xs font-bold text-blue-400 uppercase tracking-widest w-16 sm:w-20">PROD</label>
+                            <input type="number" id="target-prod" class="flex-1 p-2 bg-slate-800 border border-slate-700 rounded-md font-black text-base text-white outline-none text-center">
+                        </div>
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="text-xs font-bold text-blue-400 uppercase tracking-widest w-16 sm:w-20">QC</label>
+                            <input type="number" id="target-qc" class="flex-1 p-2 bg-slate-800 border border-slate-700 rounded-md font-black text-base text-white outline-none text-center">
+                        </div>
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="text-xs font-bold text-blue-400 uppercase tracking-widest w-16 sm:w-20">SQC</label>
+                            <input type="number" id="target-sqc" class="flex-1 p-2 bg-slate-800 border border-slate-700 rounded-md font-black text-base text-white outline-none text-center">
+                        </div>
+                        <button onclick="saveGlobalRoleParams()" class="w-full bg-blue-600 text-white px-4 py-3 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-sm mt-2">Save Global Targets</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://hpccuwrzifqrghlbvcmp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwY2N1d3J6aWZxcmdobGJ2Y21wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzk5NjEsImV4cCI6MjA4OTgxNTk2MX0.F8pgP5qnUQMsVnWAX_TQbs3JP6w74rC8eS_PKoAABgM'; // <--- PASTE KEY HERE
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let USER_SESSION_DATA = null;
+        
+        let ROLE_TARGETS = { PROD: 21600, QC: 21600, SQC: 21600 };
+        let MY_DAILY_TARGET = 21600;
+        let MY_WEEKLY_TARGET = 0;
+
+        let SMART_STATE = { isActive: false, remaining: 0, masterTotal: 0 };
+        let lastAlertHour = -1;
+        let auditSearchTimer = null; 
+
+        async function bootSequence() {
+            try {
+                document.getElementById('loader-text').innerText = "Verifying Credentials...";
+                const { data: { session }, error } = await client.auth.getSession();
+                if (error) throw error;
+                if (session?.user) await attemptAuthorization(session.user);
+                else renderLoginUI();
+            } catch (err) { renderLoginUI(); }
+        }
+
+        client.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                attemptAuthorization(session.user);
+            } else if (event === 'SIGNED_OUT') renderLoginUI();
+        });
+
+        async function attemptAuthorization(user) {
+            try {
+                const { data: profile, error } = await client.from('profiles').select('*').ilike('email', user.email.trim()).single();
+                if (error || !profile) {
+                    client.auth.signOut().catch(()=>{});
+                    alert("ACCESS DENIED: Your email is not whitelisted.");
+                    return renderLoginUI();
+                }
+
+                USER_SESSION_DATA = profile;
+                USER_SESSION_DATA.role = USER_SESSION_DATA.role ? USER_SESSION_DATA.role.toUpperCase() : 'PROD';
+
+                const { data: settings } = await client.from('settings').select('*');
+                if (settings) {
+                    settings.forEach(s => {
+                        if(s.key === 'target_prod_secs') ROLE_TARGETS.PROD = s.value_int;
+                        if(s.key === 'target_qc_secs') ROLE_TARGETS.QC = s.value_int;
+                        if(s.key === 'target_sqc_secs') ROLE_TARGETS.SQC = s.value_int;
+                    });
+                }
+
+                MY_DAILY_TARGET = USER_SESSION_DATA.daily_target_secs || ROLE_TARGETS[USER_SESSION_DATA.role] || 21600;
+                MY_WEEKLY_TARGET = MY_DAILY_TARGET * 6;
+
+                if (USER_SESSION_DATA.is_admin) {
+                    if(document.getElementById('target-prod')) document.getElementById('target-prod').value = ROLE_TARGETS.PROD;
+                    if(document.getElementById('target-qc')) document.getElementById('target-qc').value = ROLE_TARGETS.QC;
+                    if(document.getElementById('target-sqc')) document.getElementById('target-sqc').value = ROLE_TARGETS.SQC;
+                }
+
+                igniteWorkspace();
+            } catch (err) { client.auth.signOut().catch(()=>{}); renderLoginUI(); }
+        }
+
+        async function signIn() { await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } }); }
+        async function signOut() { await client.auth.signOut(); window.location.reload(); }
+
+        function renderLoginUI() {
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('loader').classList.add('hidden');
+        }
+
+        function igniteWorkspace() {
+            document.getElementById('app').classList.remove('hidden');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('loader').classList.add('hidden');
+            
+            document.getElementById('user-email').innerText = USER_SESSION_DATA.email;
+            document.getElementById('user-name').innerText = USER_SESSION_DATA.full_name;
+            document.getElementById('role-display').innerText = USER_SESSION_DATA.is_admin ? 'ADMIN' : USER_SESSION_DATA.role;
+            
+            if (USER_SESSION_DATA.is_admin) {
+                document.getElementById('worker-layout').classList.add('hidden');
+                document.getElementById('admin-layout').classList.remove('hidden');
+                document.getElementById('admin-layout').classList.add('flex');
+                switchAdminTab('audit');
+            } else {
+                document.getElementById('worker-layout').classList.remove('hidden');
+                document.getElementById('admin-layout').classList.add('hidden');
+                document.getElementById('admin-layout').classList.remove('flex');
+                setInterval(checkHourlySync, 20000); 
+            }
+
+            triggerDataRefresh();
+        }
+
+        function copyProductionTotal() {
+            const totalText = document.getElementById('daily-total').innerText;
+            if (!totalText || totalText === "00:00:00") return;
+            navigator.clipboard.writeText(totalText).then(() => {
+                showToast("📋 COPIED: " + totalText);
+            }).catch(err => {
+                showToast("❌ COPY FAILED");
+            });
+        }
+
+        function getLogicalShiftDate() {
+            const now = new Date();
+            if (now.getHours() < 7) now.setDate(now.getDate() - 1);
+            return now.toISOString().split('T')[0];
+        }
+
+        function triggerDataRefresh() {
+            document.getElementById('shift-display').innerHTML = `<span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Shift: ${getLogicalShiftDate()}`;
+            if (!USER_SESSION_DATA.is_admin) {
+                refreshWorkerHUD(); 
+                refreshTeamLeaderboard();
+            } else {
+                refreshAuditData();
+            }
+        }
+
+        let audioUnlocked = false;
+        function unlockAudioEngine() {
+            if (audioUnlocked) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const buffer = ctx.createBuffer(1, 1, 22050);
+                const source = ctx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(ctx.destination);
+                source.start(0);
+                ctx.resume().then(() => {
+                    audioUnlocked = true;
+                    document.removeEventListener('click', unlockAudioEngine);
+                    document.removeEventListener('touchstart', unlockAudioEngine);
+                });
+            } catch(e) {
+                console.log("Audio unlock failed");
+            }
+        }
+        document.addEventListener('click', unlockAudioEngine);
+        document.addEventListener('touchstart', unlockAudioEngine);
+
+        function playAlertChime() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, ctx.currentTime); 
+                
+                gain.gain.setValueAtTime(0, ctx.currentTime); 
+                gain.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.05); 
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); 
+                
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 1.5);
+            } catch(e) { console.log("Audio disabled by browser."); }
+        }
+
+        function checkHourlySync() {
+            const now = new Date();
+            const m = now.getMinutes();
+            const h = now.getHours();
+            const isShiftHour = (h >= 20 || h <= 7);
+
+            if (isShiftHour && m === 30 && lastAlertHour !== h) {
+                lastAlertHour = h;
+                triggerHourlyAlert();
+            }
+        }
+
+        function triggerHourlyAlert() {
+            if (activeAlarmLoop) clearInterval(activeAlarmLoop);
+            
+            playAlertChime();
+            activeAlarmLoop = setInterval(playAlertChime, 10000);
+
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.id = 'hourly-alert-toast';
+            
+            t.className = "bg-yellow-400 text-yellow-900 border-2 border-yellow-500 text-xs sm:text-sm font-black uppercase tracking-widest p-4 rounded-lg shadow-2xl toast-anim flex flex-col sm:flex-row items-center gap-3 pointer-events-auto cursor-pointer text-center sm:text-left";
+            t.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <svg class="w-6 h-6 animate-pulse shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 
+                    <span>HOURLY SYNC DUE: Submit current IN-PROGRESS seconds!</span>
+                </div>
+                <span class="text-[10px] opacity-80 sm:ml-auto bg-yellow-500 px-3 py-1.5 rounded text-yellow-900 shrink-0 mt-2 sm:mt-0 shadow-sm">CLICK TO SILENCE</span>
+            `;
+            
+            const silenceAlarm = () => {
+                if (activeAlarmLoop) clearInterval(activeAlarmLoop);
+                t.style.opacity = '0'; 
+                setTimeout(() => t.remove(), 300);
+            };
+
+            t.onclick = silenceAlarm;
+            c.appendChild(t);
+            
+            setTimeout(silenceAlarm, 60000);
+        }
+
+        function setStatus(val) {
+            const statusInput = document.getElementById('status');
+            if (statusInput.disabled) return;
+            
+            statusInput.value = val;
+            const btnComp = document.getElementById('btn-status-completed');
+            const btnInProg = document.getElementById('btn-status-inprogress');
+            
+            if (val === 'COMPLETED') {
+                btnComp.className = "flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 bg-white shadow-sm text-blue-700";
+                btnInProg.className = "flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 text-slate-500 hover:text-slate-800";
+            } else {
+                btnInProg.className = "flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 bg-white shadow-sm text-blue-700";
+                btnComp.className = "flex-1 py-2 text-xs font-black uppercase rounded-md transition-all duration-200 text-slate-500 hover:text-slate-800";
+            }
+            
+            statusInput.dispatchEvent(new Event('change'));
+        }
+
+        document.getElementById('audioId').addEventListener('input', async (e) => {
+            const val = e.target.value.trim().toUpperCase(); 
+            const hint = document.getElementById('id-hint');
+            const submitBtn = document.getElementById('submitBtn');
+            const statusInput = document.getElementById('status');
+            const secContainer = document.getElementById('sec-input-container');
+            const glow = document.getElementById('smart-glow');
+            const toggleContainer = document.getElementById('status-toggle-container');
+            
+            SMART_STATE = { isActive: false, remaining: 0, masterTotal: 0 };
+            glow.className = "absolute top-0 left-0 w-full h-1 transition-colors duration-300 bg-slate-100";
+
+            if (!val) { hint.innerText = ""; resetFormUI(); return; }
+
+            const { data: master } = await client.from('master_ids').select('duration_seconds').eq('audio_id', val).single();
+            if (!master) {
+                hint.innerHTML = `<span class="text-red-500">✗ ID NOT FOUND IN MASTER DATASET</span>`;
+                resetFormUI(); return;
+            }
+            
+            SMART_STATE.masterTotal = parseFloat(master.duration_seconds);
+
+            const { data: logs } = await client.from('task_log').select('logged_seconds, status, worker_email, created_at, profiles(role, full_name)').eq('audio_id', val);
+            
+            let myLoggedSecs = 0;
+            let isCompletedByMe = false;
+            let myCompletionTime = null;
+            
+            let isClaimedByPeer = false;
+            let peerName = "";
+            let peerCompletionTime = null;
+
+            if (logs) {
+                for (const l of logs) {
+                    const logRole = (l.profiles?.role || '').toUpperCase();
+                    const logName = l.profiles?.full_name || l.worker_email.split('@')[0];
+
+                    if (logRole === USER_SESSION_DATA.role && l.worker_email !== USER_SESSION_DATA.email) {
+                        isClaimedByPeer = true;
+                        peerName = logName;
+                        if (l.status.toUpperCase() === 'COMPLETED') {
+                            peerCompletionTime = new Date(l.created_at);
+                        }
+                    }
+                    if (l.worker_email === USER_SESSION_DATA.email) {
+                        myLoggedSecs += parseFloat(l.logged_seconds);
+                        if (l.status.toUpperCase() === 'COMPLETED') {
+                            isCompletedByMe = true;
+                            myCompletionTime = new Date(l.created_at);
+                        }
+                    }
+                }
+            }
+
+            if (isClaimedByPeer) {
+                if (peerCompletionTime) {
+                    const dStr = peerCompletionTime.toLocaleDateString();
+                    const tStr = peerCompletionTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    hint.innerHTML = `<span class="text-red-600 bg-red-50 px-2 py-1 rounded shadow-sm block">⛔ ${peerName} completed this on ${dStr} at ${tStr}</span>`;
+                } else {
+                    hint.innerHTML = `<span class="text-red-600 bg-red-50 px-2 py-1 rounded shadow-sm block">⛔ CLAIMED BY ${peerName} (${USER_SESSION_DATA.role})</span>`;
+                }
+                submitBtn.disabled = true; submitBtn.innerText = "LOCKED";
+                glow.classList.replace('bg-slate-100', 'bg-red-500');
+                return;
+            }
+
+            if (isCompletedByMe) {
+                const dStr = myCompletionTime ? myCompletionTime.toLocaleDateString() : '';
+                const tStr = myCompletionTime ? myCompletionTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                hint.innerHTML = `<span class="text-green-600 bg-green-50 px-2 py-1 rounded shadow-sm block">✓ You completed this on ${dStr} at ${tStr}</span>`;
+                submitBtn.disabled = true; submitBtn.innerText = "ALREADY DONE";
+                glow.classList.replace('bg-slate-100', 'bg-green-500');
+                return;
+            }
+
+            if (myLoggedSecs > 0 && myLoggedSecs < SMART_STATE.masterTotal) {
+                SMART_STATE.isActive = true;
+                SMART_STATE.remaining = SMART_STATE.masterTotal - myLoggedSecs;
+                
+                hint.innerHTML = `<span class="text-blue-600 bg-blue-50 px-2 py-0.5 rounded shadow-sm block">⚡ IN PROGRESS. Remaining: ${SMART_STATE.remaining.toFixed(1)}s</span>`;
+                
+                setStatus('COMPLETED');
+                statusInput.disabled = true;
+                toggleContainer.classList.add('opacity-50', 'pointer-events-none');
+                
+                secContainer.classList.add('hidden');
+                submitBtn.innerText = `SUBMIT REMAINING (${SMART_STATE.remaining.toFixed(1)}s)`;
+                submitBtn.disabled = false;
+                glow.classList.replace('bg-slate-100', 'bg-blue-500');
+            } else {
+                hint.innerHTML = `<span class="text-green-600 block pt-1">✓ VERIFIED: ${formatHMS(SMART_STATE.masterTotal)}</span>`;
+                resetFormUI();
+            }
+        });
+
+        function resetFormUI() {
+            const statusInput = document.getElementById('status');
+            statusInput.disabled = false;
+            document.getElementById('status-toggle-container').classList.remove('opacity-50', 'pointer-events-none');
+            
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').innerText = "SUBMIT";
+            if(statusInput.value === 'IN_PROGRESS') document.getElementById('sec-input-container').classList.remove('hidden');
+            else document.getElementById('sec-input-container').classList.add('hidden');
+        }
+
+        document.getElementById('status').addEventListener('change', (e) => {
+            if(!SMART_STATE.isActive) {
+                document.getElementById('sec-input-container').classList.toggle('hidden', e.target.value === 'COMPLETED');
+            }
+        });
+
+        async function handleTaskSubmission() {
+            const idInput = document.getElementById('audioId');
+            const audioId = idInput.value.trim().toUpperCase();
+            if (!audioId) return showToast("Enter Audio ID");
+            
+            const btn = document.getElementById('submitBtn'); 
+            btn.disabled = true; btn.innerText = "Processing...";
+            
+            try {
+                let finalSeconds = 0;
+                let finalStatus = document.getElementById('status').value;
+
+                if (SMART_STATE.isActive) {
+                    finalSeconds = SMART_STATE.remaining;
+                    finalStatus = 'COMPLETED';
+                } else {
+                    if (finalStatus === 'COMPLETED') {
+                        finalSeconds = SMART_STATE.masterTotal;
+                    } else {
+                        finalSeconds = parseFloat(document.getElementById('seconds').value);
+                        if (isNaN(finalSeconds) || finalSeconds <= 0) throw new Error("Invalid manual seconds.");
+                        if (finalSeconds >= SMART_STATE.masterTotal) throw new Error(`In-Progress cannot exceed master duration (${SMART_STATE.masterTotal}s). Use COMPLETED instead.`);
+                    }
+                }
+                
+                const { error } = await client.from('task_log').insert([{ audio_id: audioId, worker_email: USER_SESSION_DATA.email, logged_seconds: finalSeconds, status: finalStatus, shift_date: getLogicalShiftDate() }]);
+                if (error) throw error;
+                
+                showToast(`✅ SUCCESS: ${audioId} Logged`); 
+
+                if (activeAlarmLoop) clearInterval(activeAlarmLoop);
+                const alertToast = document.getElementById('hourly-alert-toast');
+                if (alertToast) {
+                    alertToast.style.opacity = '0';
+                    setTimeout(() => { if(alertToast) alertToast.remove() }, 300);
+                }
+                
+                if (finalStatus === 'IN_PROGRESS') {
+                    document.getElementById('seconds').value = "";
+                    idInput.dispatchEvent(new Event('input'));
+                } else {
+                    idInput.value = ""; document.getElementById('seconds').value = ""; document.getElementById('id-hint').innerText = "";
+                    resetFormUI();
+                    document.getElementById('smart-glow').className = "absolute top-0 left-0 w-full h-1 bg-slate-100 transition-colors duration-300";
+                }
+
+                triggerDataRefresh();
+            } catch (e) { 
+                alert(e.message); 
+                btn.disabled = false; btn.innerText = SMART_STATE.isActive ? `SUBMIT REMAINING` : "SUBMIT"; 
+            }
+        }
+
+        async function refreshWorkerHUD() {
+            const sd = getLogicalShiftDate();
+            const { data: logs } = await client.from('task_log').select('*').eq('worker_email', USER_SESSION_DATA.email).eq('shift_date', sd).order('created_at', { ascending: false });
+
+            const totalSecs = logs?.reduce((sum, l) => sum + parseFloat(l.logged_seconds), 0) || 0;
+            const remainingSecs = Math.max(0, MY_DAILY_TARGET - totalSecs);
+            
+            document.getElementById('daily-total').innerText = formatHMS(totalSecs);
+            document.getElementById('daily-remaining').innerText = `Target Remaining: ${formatHMS(remainingSecs)}`;
+            
+            const pct = Math.min(100, (totalSecs / MY_DAILY_TARGET) * 100);
+            document.getElementById('progress-bar').style.width = pct + "%";
+            document.getElementById('target-pct').innerText = Math.round(pct) + "% ACHIEVED";
+
+            document.getElementById('my-shift-logs').innerHTML = logs?.length ? logs.map(l => `
+                <div class="flex justify-between items-center py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 px-2 rounded transition-colors">
+                    <div>
+                        <p class="text-xs font-black text-slate-800 tracking-tight">${l.audio_id}</p>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">${new Date(l.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} • ${l.status}</p>
+                    </div>
+                    <p class="text-xs font-black text-blue-600">${parseFloat(l.logged_seconds).toFixed(1)}s</p>
+                </div>
+            `).join('') : '<div class="py-8 text-center text-xs font-bold text-slate-300 uppercase tracking-widest">No Shift Data</div>';
+
+            renderWeeklyChart();
+        }
+
+        async function refreshTeamLeaderboard() {
+            try {
+                const sd = getLogicalShiftDate();
+                const viewRole = USER_SESSION_DATA.is_admin ? 'PROD' : USER_SESSION_DATA.role;
+                document.getElementById('lb-role-name').innerText = viewRole;
+
+                const { data: team, error } = await client.from('profiles')
+                    .select('full_name, email, task_log(logged_seconds)')
+                    .ilike('role', viewRole)
+                    .eq('is_admin', false)
+                    .eq('task_log.shift_date', sd);
+
+                if (error) throw error;
+
+                const board = (team || []).map(p => {
+                    const logs = p.task_log || [];
+                    const dayProd = logs.reduce((s, l) => s + parseFloat(l.logged_seconds || 0), 0);
+                    return { name: p.full_name, email: p.email, secs: dayProd };
+                }).sort((a,b) => b.secs - a.secs);
+
+                if (board.length === 0) {
+                     document.getElementById('leaderboard-list').innerHTML = `<p class="text-slate-400 text-xs text-center mt-4">No team members found.</p>`;
+                     return;
+                }
+
+                document.getElementById('leaderboard-list').innerHTML = board.map((u, i) => {
+                    const rank = i + 1; 
+                    const isMe = u.email === USER_SESSION_DATA.email;
+                    let rankClass = isMe ? "bg-blue-600 text-white shadow-md z-10" : "bg-white border-slate-100";
+                    
+                    if(!isMe) {
+                        if(rank === 1) rankClass = "rank-1";
+                        else if(rank === 2) rankClass = "rank-2";
+                        else if(rank === 3) rankClass = "rank-3";
+                    }
+
+                    return `
+                        <div class="flex justify-between items-center p-3 rounded-lg border ${rankClass} transition-transform">
+                            <div class="flex items-center gap-3 overflow-hidden pr-2">
+                                <span class="text-xs font-black w-4 opacity-70 shrink-0">${rank}.</span>
+                                <span class="text-xs font-black uppercase tracking-tight truncate max-w-[120px] sm:max-w-none">${u.name}</span>
+                            </div>
+                            <span class="text-xs font-black shrink-0">${formatHMS(u.secs)}</span>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Leaderboard error:", err);
+                document.getElementById('leaderboard-list').innerHTML = `<p class="text-red-500 text-[10px] text-center mt-4">Sync Error: Refreshing data.</p>`;
+            }
+        }
+
+        async function renderWeeklyChart() {
+            const { data: logs } = await client.from('task_log').select('logged_seconds, shift_date').eq('worker_email', USER_SESSION_DATA.email).order('shift_date', {ascending:false}).limit(200);
+            const dataMap = {};
+            let weeklyTotal = 0;
+            logs?.forEach(l => {
+                dataMap[l.shift_date] = (dataMap[l.shift_date] || 0) + parseFloat(l.logged_seconds);
+            });
+
+            const dObj = new Date(); const sunPivot = dObj.getDate() - dObj.getDay();
+            const chart = document.getElementById('weekly-chart'); chart.innerHTML = "";
+
+            for(let i=0; i<7; i++) {
+                const dayObj = new Date(dObj.setDate(sunPivot + i));
+                const dayStr = dayObj.toISOString().split('T')[0];
+                const vol = dataMap[dayStr] || 0;
+                weeklyTotal += vol;
+                
+                const h = Math.min(100, (vol / MY_DAILY_TARGET) * 100);
+                const isNow = dayStr === getLogicalShiftDate();
+                
+                const volStr = vol > 0 ? formatHMS(vol) : '';
+
+                chart.insertAdjacentHTML('beforeend', `
+                    <div class="flex-1 flex flex-col items-center h-full min-w-[35px]">
+                        <span class="text-[9px] font-bold text-slate-400 w-full text-center tracking-tighter hidden sm:block h-4 mb-1">${volStr}</span>
+                        <div class="w-full bg-slate-100 rounded-t-md flex-1 flex items-end overflow-hidden border border-slate-200 mb-1.5">
+                            <div class="${isNow ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-slate-300'} w-full transition-all duration-700" style="height: ${h}%"></div>
+                        </div>
+                        <span class="text-[10px] font-bold ${isNow?'text-blue-600':'text-slate-400'} uppercase tracking-widest">${dayObj.toLocaleDateString('en-US', {weekday:'short'})}</span>
+                    </div>
+                `);
+            }
+            
+            const weekRemain = Math.max(0, MY_WEEKLY_TARGET - weeklyTotal);
+            document.getElementById('weekly-remaining').innerText = `WK REMAINING: ${formatHMS(weekRemain)}`;
+        }
+
+        function switchAdminTab(t) {
+            const isAud = t === 'audit';
+            document.getElementById('subtab-audit').classList.toggle('hidden', !isAud);
+            document.getElementById('subtab-personnel').classList.toggle('hidden', isAud);
+            
+            if (isAud) {
+                document.getElementById('subtab-audit').classList.add('flex');
+                document.getElementById('subtab-personnel').classList.remove('grid');
+            } else {
+                document.getElementById('subtab-audit').classList.remove('flex');
+                document.getElementById('subtab-personnel').classList.add('grid');
+            }
+            
+            document.getElementById('tab-audit-btn').className = isAud ? "bg-blue-600 text-white border border-blue-600 px-5 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-md" : "bg-white text-slate-500 border border-slate-200 px-5 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-slate-50";
+            document.getElementById('tab-personnel-btn').className = !isAud ? "bg-blue-600 text-white border border-blue-600 px-5 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-md" : "bg-white text-slate-500 border border-slate-200 px-5 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-slate-50";
+            if (isAud) refreshAuditData();
+        }
+
+        function triggerAuditSearch() {
+            clearTimeout(auditSearchTimer);
+            auditSearchTimer = setTimeout(() => refreshAuditData(), 300);
+        }
+
+        async function refreshAuditData() {
+            const searchTerm = document.getElementById('audit-search').value.trim().toUpperCase();
+            
+            let query = client.from('task_log')
+                .select('id, audio_id, worker_email, logged_seconds, status, shift_date, created_at, profiles(full_name)')
+                .order('created_at', { ascending: false });
+
+            if (searchTerm) {
+                query = query.ilike('audio_id', `%${searchTerm}%`);
+            } else {
+                query = query.limit(200);
+            }
+
+            const { data: logs, error } = await query;
+            
+            const tbody = document.getElementById('admin-audit-tbody');
+            if(error) { tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-red-500 text-center font-bold">Error: ${error.message}</td></tr>`; return; }
+
+            tbody.innerHTML = logs?.length ? logs.map(l => `
+                <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                    <td class="p-4 text-slate-500 font-semibold">${new Date(l.created_at).toLocaleTimeString()}</td>
+                    <td class="p-4 font-bold text-blue-600 tracking-widest">${l.shift_date}</td>
+                    <td class="p-4"><p class="font-black text-slate-800 uppercase tracking-tight">${l.profiles?.full_name || 'N/A'}</p><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">${l.worker_email}</p></td>
+                    <td class="p-4 font-black text-slate-900">${l.audio_id}</td>
+                    <td class="p-4 font-semibold text-center">${parseFloat(l.logged_seconds).toFixed(1)}s</td>
+                    <td class="p-4 text-center"><span class="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold uppercase tracking-widest shadow-sm">${l.status}</span></td>
+                    <td class="p-4 text-right"><button onclick="adminDelete(${l.id})" class="text-red-500 hover:text-red-700 hover:underline font-bold uppercase tracking-widest text-[10px]">Delete</button></td>
+                </tr>
+            `).join('') : `<tr><td colspan="7" class="p-10 text-center text-slate-400 font-bold uppercase text-xs">No records found ${searchTerm ? 'for "'+searchTerm+'"' : ''}</td></tr>`;
+        }
+
+        async function adminDelete(id) { if(confirm("Confirm deletion?")) { await client.from('task_log').delete().eq('id', id); refreshAuditData(); triggerDataRefresh(); } }
+
+        async function onboardEmployee() {
+            const email = document.getElementById('onboard-email').value.trim().toLowerCase();
+            const name = document.getElementById('onboard-name').value.trim().toUpperCase();
+            const role = document.getElementById('onboard-role').value;
+            const customTarget = document.getElementById('onboard-target').value;
+
+            if (!email) return alert("Email required.");
+            
+            let payload = { email, full_name: name || undefined, role };
+            if (customTarget) payload.daily_target_secs = parseInt(customTarget);
+            else payload.daily_target_secs = null;
+
+            const { error } = await client.from('profiles').upsert(payload);
+            if (error) { alert("Failed: " + error.message); } 
+            else { 
+                showToast("User Updated Automatically"); 
+                document.getElementById('onboard-email').value = ""; 
+                document.getElementById('onboard-name').value = ""; 
+                document.getElementById('onboard-target').value = "";
+            }
+        }
+
+        async function saveGlobalRoleParams() {
+            const tp = document.getElementById('target-prod').value;
+            const tq = document.getElementById('target-qc').value;
+            const ts = document.getElementById('target-sqc').value;
+
+            if(tp) await client.from('settings').upsert({ key: 'target_prod_secs', value_int: parseInt(tp) });
+            if(tq) await client.from('settings').upsert({ key: 'target_qc_secs', value_int: parseInt(tq) });
+            if(ts) await client.from('settings').upsert({ key: 'target_sqc_secs', value_int: parseInt(ts) });
+
+            showToast("Global Roles Updated");
+        }
+
+        function showToast(msg) {
+            const c = document.getElementById('toast-container'); const t = document.createElement('div');
+            t.className = "bg-slate-900 text-white text-xs font-bold uppercase tracking-widest px-6 py-4 rounded-lg shadow-xl toast-anim border border-slate-700 pointer-events-auto text-center";
+            t.innerText = msg; c.appendChild(t); setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+        }
+
+        function formatHMS(s) {
+            const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60); const sec = Math.floor(s%60);
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        }
+
+        async function downloadMasterReport() {
+            const btn = document.querySelector('button[onclick="downloadMasterReport()"]');
+            const originalText = btn.innerText;
+            btn.innerText = "Exporting...";
+            btn.disabled = true;
+
+            try {
+                const { data: logs, error } = await client.from('task_log')
+                    .select('id, audio_id, worker_email, logged_seconds, status, shift_date, created_at, profiles(full_name)')
+                    .order('created_at', { ascending: false });
+
+                if(error) throw error;
+
+                let csv = "Time,Shift_Date,Name,Email,Audio_ID,Seconds,Status\n";
+                logs.forEach(l => {
+                    const time = new Date(l.created_at).toLocaleTimeString();
+                    const name = l.profiles?.full_name || 'N/A';
+                    csv += `"${time}","${l.shift_date}","${name}","${l.worker_email}","${l.audio_id}","${l.logged_seconds}","${l.status}"\n`;
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv' }); 
+                const a = document.createElement('a'); 
+                a.href = URL.createObjectURL(blob);
+                a.download = `Audit_Master_${getLogicalShiftDate()}.csv`; 
+                a.click();
+            } catch (err) {
+                alert("Export failed: " + err.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        bootSequence();
+    </script>
+</body>
+</html>

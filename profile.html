@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Profile | AudioLog Pro</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="styles.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f5f7; color: #0f172a; -webkit-font-smoothing: antialiased; }
+        .data-numbers { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+        
+        .enterprise-table { width: 100%; text-align: left; border-collapse: separate; border-spacing: 0; }
+        .enterprise-table th { position: sticky; top: 0; background-color: #f8fafc; padding: 10px 16px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; z-index: 10; }
+        .enterprise-table td { padding: 8px 16px; font-size: 11px; font-weight: 600; border-bottom: 1px solid #f1f5f9; transition: background-color 0.1s; }
+        .enterprise-table tbody tr:hover td { background-color: #f8fafc; }
+        
+        .val-active { color: #1d4ed8; font-weight: 800; }
+        .val-warning { color: #d97706; font-weight: 800; }
+        .val-danger { color: #e11d48; font-weight: 800; }
+    </style>
+</head>
+<body class="p-4 xl:p-8 pb-20">
+
+    <div id="auth-overlay" class="fixed inset-0 bg-slate-900 z-[999] flex flex-col items-center justify-center text-white">
+        <div class="w-10 h-10 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-xs font-black uppercase tracking-widest text-slate-400">Loading Personnel Dossier...</p>
+    </div>
+
+    <div id="app" class="hidden w-full max-w-[1200px] mx-auto flex flex-col gap-6">
+
+        <div class="panel w-full flex flex-col border-t-4 border-t-indigo-600">
+            <div class="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200">
+                <div>
+                    <h1 class="text-3xl font-black text-slate-900 tracking-tight uppercase" id="prof-name">---</h1>
+                    <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1" id="prof-role">---</p>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5" id="prof-email">---</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="window.close()" class="bg-white text-slate-700 border border-slate-300 px-5 py-2.5 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-colors">Close Profile</button>
+                    <a href="reports.html" class="bg-slate-900 text-white px-5 py-2.5 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-sm">Master Reports</a>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200 bg-slate-50">
+                <div class="p-6">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">All-Time Audio Yield</p>
+                    <h3 id="kpi-life-yield" class="text-3xl font-black tracking-tighter mt-1 data-numbers text-slate-800">00:00:00</h3>
+                </div>
+                <div class="p-6">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Files Completed</p>
+                    <h3 id="kpi-life-files" class="text-3xl font-black tracking-tighter mt-1 data-numbers text-slate-800">0</h3>
+                </div>
+                <div class="p-6">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Avg Output Per Shift</p>
+                    <h3 id="kpi-life-avg" class="text-3xl font-black tracking-tighter mt-1 data-numbers text-indigo-700">00:00:00</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full flex items-end justify-between border-b-2 border-slate-800 pb-2 mt-4 px-1">
+            <h2 class="text-xl font-black text-slate-900 uppercase tracking-tight">Shift Performance Audit</h2>
+            
+            <div class="flex items-center gap-3">
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Shift:</label>
+                <select id="shift-selector" onchange="renderShiftData()" class="p-2 border border-slate-300 rounded font-bold text-xs uppercase text-blue-700 outline-none cursor-pointer bg-white shadow-sm min-w-[150px]">
+                    <option value="">Loading Dates...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="panel p-5 border-l-4 border-l-blue-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Shift Total Yield</p>
+                <h3 id="kpi-shift-yield" class="text-2xl font-black tracking-tighter mt-1 data-numbers text-slate-800">00:00:00</h3>
+            </div>
+            <div class="panel p-5 border-l-4 border-l-emerald-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Shift Files Touched</p>
+                <h3 id="kpi-shift-files" class="text-2xl font-black tracking-tighter mt-1 data-numbers text-slate-800">0</h3>
+            </div>
+            <div class="panel p-5 border-l-4 border-l-amber-500 relative">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Working Time</p>
+                <div class="flex items-end gap-2 mt-1">
+                    <h3 id="kpi-shift-time" class="text-2xl font-black tracking-tighter data-numbers text-amber-700">0</h3>
+                    <p class="text-xs font-bold text-slate-500 mb-1">minutes</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel flex flex-col h-[600px]">
+            <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center z-10">
+                <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Chronological Event Ledger</h3>
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Tracks processing velocity and gaps</span>
+            </div>
+            <div class="overflow-y-auto flex-1">
+                <table class="enterprise-table">
+                    <thead>
+                        <tr>
+                            <th class="w-12 text-center">#</th>
+                            <th>Time (IST)</th>
+                            <th>Audio ID</th>
+                            <th class="text-center">Audio Yield</th>
+                            <th class="text-right border-l border-slate-200 pl-4">Personal Time Gap</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-ledger">
+                        <tr><td colspan="5" class="text-center p-8 text-slate-400 font-bold uppercase text-xs">Select a shift to view audit</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://hpccuwrzifqrghlbvcmp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwY2N1d3J6aWZxcmdobGJ2Y21wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzk5NjEsImV4cCI6MjA4OTgxNTk2MX0.F8pgP5qnUQMsVnWAX_TQbs3JP6w74rC8eS_PKoAABgM'; // <--- PASTE KEY HERE
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let TARGET_EMAIL = '';
+        let WORKER_LOGS = [];
+
+        const fmtHMS = (s) => {
+            if (!s || isNaN(s)) return "00:00:00";
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = Math.floor(s % 60);
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        };
+
+        async function init() {
+            try {
+                // 1. Auth Check
+                const { data: { session }, error } = await client.auth.getSession();
+                if (error || !session) return window.location.href = "index.html";
+                const { data: adminCheck } = await client.from('profiles').select('is_admin').ilike('email', session.user.email.trim()).single();
+                if (!adminCheck || !adminCheck.is_admin) return window.location.href = "index.html";
+
+                // 2. Get Email from URL (e.g., profile.html?email=jason@test.com)
+                const urlParams = new URLSearchParams(window.location.search);
+                TARGET_EMAIL = urlParams.get('email');
+                
+                if (!TARGET_EMAIL) {
+                    alert("No employee specified.");
+                    window.close();
+                    return;
+                }
+
+                // 3. Fetch Profile Data
+                const { data: profile } = await client.from('profiles').select('*').ilike('email', TARGET_EMAIL).single();
+                if (profile) {
+                    document.getElementById('prof-name').innerText = profile.full_name || 'Unknown User';
+                    document.getElementById('prof-role').innerText = profile.role || 'N/A';
+                    document.getElementById('prof-email').innerText = profile.email;
+                }
+
+                // 4. Fetch All Logs for this Worker
+                const { data: logs } = await client.from('task_log')
+                    .select('*')
+                    .ilike('worker_email', TARGET_EMAIL)
+                    .order('created_at', { ascending: true }); // ASC is critical for Gap calculation
+
+                WORKER_LOGS = logs || [];
+
+                document.getElementById('auth-overlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('auth-overlay').classList.add('hidden'), 300);
+                document.getElementById('app').classList.remove('hidden');
+
+                calculateLifetimeStats();
+                populateDateSelector();
+
+            } catch (err) { 
+                console.error(err);
+                window.location.href = "reports.html"; 
+            }
+        }
+
+        function calculateLifetimeStats() {
+            let totalSecs = 0;
+            const uniqueShifts = new Set();
+
+            WORKER_LOGS.forEach(l => {
+                totalSecs += parseFloat(l.logged_seconds || 0);
+                uniqueShifts.add(l.shift_date);
+            });
+
+            document.getElementById('kpi-life-yield').innerText = fmtHMS(totalSecs);
+            document.getElementById('kpi-life-files').innerText = WORKER_LOGS.length;
+            
+            const shiftsCount = uniqueShifts.size;
+            const avgPerShift = shiftsCount > 0 ? (totalSecs / shiftsCount) : 0;
+            document.getElementById('kpi-life-avg').innerText = fmtHMS(avgPerShift);
+        }
+
+        function populateDateSelector() {
+            const select = document.getElementById('shift-selector');
+            select.innerHTML = '';
+
+            // Extract unique dates and sort descending (newest first)
+            const uniqueDates = [...new Set(WORKER_LOGS.map(l => l.shift_date))].sort((a,b) => new Date(b) - new Date(a));
+
+            if (uniqueDates.length === 0) {
+                select.innerHTML = '<option value="">No shifts found</option>';
+                return;
+            }
+
+            uniqueDates.forEach(dateStr => {
+                const opt = document.createElement('option');
+                opt.value = dateStr;
+                opt.text = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                select.appendChild(opt);
+            });
+
+            // Automatically render the most recent shift
+            renderShiftData();
+        }
+
+        function renderShiftData() {
+            const selectedDate = document.getElementById('shift-selector').value;
+            if (!selectedDate) return;
+
+            const shiftLogs = WORKER_LOGS.filter(l => l.shift_date === selectedDate);
+            const tbody = document.getElementById('tbody-ledger');
+            tbody.innerHTML = '';
+
+            let shiftTotalSecs = 0;
+            let shiftRealMins = 0;
+            let lastLogTime = null;
+
+            shiftLogs.forEach((log, index) => {
+                const currentSecs = parseFloat(log.logged_seconds);
+                shiftTotalSecs += currentSecs;
+                
+                const submitTime = new Date(log.created_at);
+                const timeString = submitTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                // Gap Calculation Math
+                let gapString = "START SHIFT";
+                let gapClass = "text-slate-400";
+                
+                if (lastLogTime) {
+                    const diffMs = submitTime - lastLogTime;
+                    const diffMins = Math.round(diffMs / 60000);
+                    
+                    if (diffMins > 60) {
+                        gapString = `${diffMins} mins (LONG BREAK)`;
+                        gapClass = "val-danger";
+                    } else if (diffMins > 15) {
+                        gapString = `${diffMins} mins`;
+                        gapClass = "val-warning";
+                        shiftRealMins += diffMins;
+                    } else {
+                        gapString = `${diffMins} mins`;
+                        gapClass = "text-slate-700 font-bold";
+                        shiftRealMins += diffMins;
+                    }
+                } else {
+                    shiftRealMins += 10; // Base start time assumption
+                }
+
+                lastLogTime = submitTime;
+
+                // Render Table Row
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="text-center font-bold text-slate-400">${index + 1}</td>
+                        <td class="data-numbers text-slate-800">${timeString}</td>
+                        <td class="font-bold text-slate-900 uppercase">${log.audio_id}</td>
+                        <td class="data-numbers text-center val-active">${currentSecs === 0 ? '0' : fmtHMS(currentSecs)}</td>
+                        <td class="text-right data-numbers border-l border-slate-200 pl-4 ${gapClass}">${gapString}</td>
+                    </tr>
+                `);
+            });
+
+            // Update Shift KPIs
+            document.getElementById('kpi-shift-yield').innerText = fmtHMS(shiftTotalSecs);
+            document.getElementById('kpi-shift-files').innerText = shiftLogs.length;
+            document.getElementById('kpi-shift-time').innerText = shiftRealMins;
+        }
+
+        init();
+    </script>
+</body>
+</html>
